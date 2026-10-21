@@ -21,6 +21,9 @@ class MemoryKeyValue : KeyValue {
     override fun put(key: String, value: String) { map[key] = value }
 }
 
+/** syb.lol (Ditto, the maintainer's relay) passes the loopback test for kind 21059 wraps. */
+val DEFAULT_RELAYS = listOf("wss://syb.lol")
+
 enum class Source { CONFIGURED, REMEMBERED, LEARNED, SEED }
 
 data class LoggedTransfer(val record: TransferRecord, val transport: String, val relays: List<String>)
@@ -36,7 +39,10 @@ class Store(private val kv: KeyValue, private val now: () -> Long = { System.cur
 
     // ---- relays --------------------------------------------------------------------------
 
-    fun configured(): List<String> = synchronized(lock) { readList("configured").filterIsInstance<String>() }
+    /** Until the user sets their own, the app's own relay is tried first. */
+    fun configured(): List<String> = synchronized(lock) {
+        if (kv.get("configured") == null) DEFAULT_RELAYS else readList("configured").filterIsInstance<String>()
+    }
 
     fun setConfigured(urls: List<String>) = synchronized(lock) {
         kv.put("configured", Json.stringify(urls.mapNotNull { PairingUri.normalizeRelayUrl(it) }.distinct()))
@@ -70,6 +76,15 @@ class Store(private val kv: KeyValue, private val now: () -> Long = { System.cur
         val list = (public + learned()).distinct().take(16)
         kv.put("learned", Json.stringify(list))
     }
+
+    /** A relay that answered "rate-limited" is not tested again for ten minutes. */
+    fun noteRateLimited(url: String) = synchronized(lock) {
+        val resting = readMap("resting").filterValues { (it as? Long ?: 0L) > now() }.toMutableMap()
+        resting[url] = now() + 600
+        kv.put("resting", Json.stringify(resting))
+    }
+
+    fun isResting(url: String): Boolean = synchronized(lock) { (readMap("resting")[url] as? Long ?: 0L) > now() }
 
     // ---- §9.3 throttle --------------------------------------------------------------------
 

@@ -1,7 +1,6 @@
 package cc.aaro.qrst.net
 
 import cc.aaro.qrst.core.Event
-import cc.aaro.qrst.core.MAX_RELAYS
 import cc.aaro.qrst.core.PairingUri
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -26,9 +25,10 @@ val SEEDS = listOf(
 )
 
 const val TARGET_RELAYS = 3
-private const val BATCH = 6
+private const val BATCH = 4
 private const val GRACE_MS = 1200L
-private const val RETRY_MS = 4000L
+/** Pause before working through the list again when nothing passed, doubling each round (§11.3). */
+private val RETRY_MS = longArrayOf(5_000, 15_000, 30_000, 60_000)
 
 enum class ProgressState { TESTING, LISTED, SPARE, FAILED }
 
@@ -69,11 +69,14 @@ fun selectRelays(
     fun report() = onProgress(progress.values.toList())
     val workers = Executors.newFixedThreadPool(BATCH)
     try {
+        var round = 0
         while (alive()) {
             val candidates = LinkedHashMap<String, Source>()
             fun offer(urls: List<String>, source: Source) {
                 for (raw in urls) {
                     val url = PairingUri.normalizeRelayUrl(raw) ?: continue
+                    // A relay that rate-limited this device recently is left alone for a while.
+                    if (store.isResting(url)) continue
                     // A private-network relay is used only if the user configured it.
                     if (source != Source.CONFIGURED && runCatching { PairingUri.isPrivateHost(java.net.URI(url).host) }.getOrDefault(true)) continue
                     candidates.putIfAbsent(url, source)
@@ -111,9 +114,10 @@ fun selectRelays(
                         store.notePassed(url)
                         passed += url
                         if (firstPassAt == 0L) firstPassAt = System.currentTimeMillis()
-                        progress[url] = RelayProgress(url, source, if (passed.size <= MAX_RELAYS) ProgressState.LISTED else ProgressState.SPARE)
+                        progress[url] = RelayProgress(url, source, if (passed.size <= TARGET_RELAYS) ProgressState.LISTED else ProgressState.SPARE)
                     } else {
-                        if (source == Source.REMEMBERED) store.noteFailed(url)
+                        if (result.second?.contains("rate-limited") == true) store.noteRateLimited(url)
+                        else if (source == Source.REMEMBERED) store.noteFailed(url)
                         progress[url] = RelayProgress(url, source, ProgressState.FAILED, result.second)
                     }
                     report()
@@ -123,10 +127,10 @@ fun selectRelays(
             }
             if (passed.isNotEmpty()) {
                 // Spares stay out of the code; close them.
-                for (url in passed.drop(MAX_RELAYS)) pool.post { pool.remove(url) }
-                return passed.take(MAX_RELAYS)
+                for (url in passed.drop(TARGET_RELAYS)) pool.post { pool.remove(url) }
+                return passed.take(TARGET_RELAYS)
             }
-            Thread.sleep(RETRY_MS)
+            Thread.sleep(RETRY_MS[minOf(round++, RETRY_MS.size - 1)])
         }
         return emptyList()
     } finally {

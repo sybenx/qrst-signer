@@ -367,6 +367,9 @@ private fun TransferScreen(model: AppModel, active: Active, view: TransferView<*
     }
     Column(Modifier.fillMaxSize()) {
         TopBar(title, { model.closeTransfer() })
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f)) {
+        val room = maxHeight
+        androidx.compose.runtime.CompositionLocalProvider(LocalRoom provides room) {
         Page {
             when {
                 ended -> EndedPanel(model, active, view)
@@ -386,8 +389,13 @@ private fun TransferScreen(model: AppModel, active: Active, view: TransferView<*
             }
             RelayFooter(view)
         }
+        }
+        }
     }
 }
+
+/** Height left for content under the top bar, so a QR can be sized to fit whole on screen. */
+private val LocalRoom = androidx.compose.runtime.staticCompositionLocalOf { 600.dp }
 
 @Composable
 private fun FindingRelays(view: TransferView<*>) {
@@ -410,25 +418,59 @@ private fun Waiting(text: String, view: TransferView<*>) {
 private fun ShowCode(model: AppModel, active: Active, view: TransferView<*>) {
     val uri = view.uri ?: return
     val context = LocalContext.current
+    val config = androidx.compose.ui.platform.LocalConfiguration.current
     // §11.2b: a mode=offer code, which makes whoever scans it the Sender, carries more weight.
     val offer = view.mode == Mode.OFFER
     val what = if (active.demo) "text" else "Nostr key"
-    Text(
-        if (offer) "Scanning this sends a $what from your other device to this phone."
-        else "This phone is sending a $what. Scan this with the device that should receive it.",
-        style = if (offer) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
-        fontWeight = if (offer) FontWeight.SemiBold else FontWeight.Normal,
-    )
-    if (!offer && active.entry != null) Text("Key: ${active.entry.label}", color = Release)
-    Box(
-        Modifier.fillMaxWidth().aspectRatio(1f)
-            .border(if (offer) 6.dp else 1.dp, if (offer) Release else MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-            .padding(if (offer) 14.dp else 8.dp),
-    ) {
-        QrImage(uri, Modifier.fillMaxSize())
+    // The whole code has to be on screen at once: on a short, wide screen (a handheld in
+    // landscape) it is sized to the height, with the words beside it.
+    val wide = config.screenWidthDp > config.screenHeightDp
+    // Page padding is 8 dp top and bottom; keep a little more so nothing touches the edge.
+    val room = LocalRoom.current - 24.dp
+    val side = if (wide) minOf(room, (config.screenWidthDp * 0.6f).dp) else minOf((config.screenWidthDp - 40).dp, room)
+    KeepBright()
+
+    val words: @Composable () -> Unit = {
+        Text(
+            if (offer) "Scanning this sends a $what from your other device to this phone."
+            else "This phone is sending a $what. Scan this with the device that should receive it.",
+            style = if (offer) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
+            fontWeight = if (offer) FontWeight.SemiBold else FontWeight.Normal,
+        )
+        if (!offer && active.entry != null) Text("Key: ${active.entry.label}", color = Release)
+        Text("Only show this to your own devices. Whoever scans it can answer it.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton({ copy(context, "QRST pairing link", uri) }) { Text("Copy the link instead") }
     }
-    Text("Only show this to your own devices. Whoever scans it can answer it.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    TextButton({ copy(context, "QRST pairing link", uri) }) { Text("Copy the link instead") }
+    val code: @Composable () -> Unit = {
+        Box(
+            Modifier.size(side)
+                .border(if (offer) 6.dp else 1.dp, if (offer) Release else MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+                .padding(if (offer) 10.dp else 6.dp),
+        ) {
+            QrImage(uri, Modifier.fillMaxSize())
+        }
+    }
+    if (wide) {
+        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            code()
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) { words() }
+        }
+    } else {
+        words()
+        code()
+    }
+}
+
+/** Full brightness while a code is on screen, so another camera can read it. */
+@Composable
+private fun KeepBright() {
+    val activity = LocalContext.current as? android.app.Activity ?: return
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val window = activity.window
+        val before = window.attributes.screenBrightness
+        window.attributes = window.attributes.apply { screenBrightness = 1f }
+        onDispose { window.attributes = window.attributes.apply { screenBrightness = before } }
+    }
 }
 
 @Composable

@@ -18,7 +18,7 @@ That's all it does. It holds keys and transfers them, in both directions. It doe
   screen lock, and only then does the key leave.
 
 The key travels sealed (NIP-44 inside a NIP-59 gift wrap, ephemeral kind 21059) over public relays that are each
-tested before use. A stranger who photographs a code gets digits that won't match.
+tested before use (wss://syb.lol first, by default; change it in Settings). A stranger who photographs a code gets digits that won't match.
 
 What it can't protect against: sending your key to a device that isn't yours. Only you saying no at the send prompt
 stops that (QRST §15).
