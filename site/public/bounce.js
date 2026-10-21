@@ -17,11 +17,15 @@
       ? 'The device showing this code wants to receive ' + what + '. The app will ask you to type the digits that device shows before anything is sent.'
       : 'The device showing this code is sending ' + what + '. The app will show digits to type on that device.';
 
-  // Android: an intent link to the app, with the whole https link (fragment included) as its data.
-  var rest = link.replace(/^https:\/\//, '');
-  document.getElementById('open').href =
-    'intent://' + rest + '#Intent;scheme=https;package=cc.aaro.qrst;S.browser_fallback_url=' +
-    encodeURIComponent('https://github.com/sybenx/qrst-signer/releases') + ';end';
+  // The qrst: handoff of QRST §11.2c: the same parameters with the key as the host, for
+  // whichever installed QRST app claims the scheme. Followed only when the user taps it.
+  var npub = params.get('npub');
+  var rest = hash.split('&').filter(function (part) { return part.indexOf('npub=') !== 0; }).join('&');
+  var handoff = npub + '?' + rest;
+  document.getElementById('open').href = /Android/i.test(navigator.userAgent)
+    ? 'intent://' + handoff + '#Intent;scheme=qrst;S.browser_fallback_url=' +
+      encodeURIComponent('https://github.com/sybenx/qrst-signer/releases') + ';end'
+    : 'qrst://' + handoff;
 
   document.getElementById('copy').addEventListener('click', function () {
     navigator.clipboard.writeText(link).then(function () { document.getElementById('copied').hidden = false; });

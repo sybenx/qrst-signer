@@ -293,7 +293,7 @@ private fun PickKeyScreen(model: AppModel, s: Screen.PickKey, keys: List<VaultEn
                 Text("Test text (reference demo profile)", color = Receipt)
                 OutlinedTextField(text, { text = it }, label = { Text("Made-up text, not a real secret") }, modifier = Modifier.fillMaxWidth())
                 Button({
-                    if (s.params == null) model.sendDemoByShowing(text, CodeCheck.COMPARE) else model.sendDemoTo(s.params, s.viaCamera, text)
+                    if (s.params == null) model.sendDemoByShowing(text, CodeCheck.COMPARE) else model.sendDemoTo(s.params, s.viaCamera, text, s.demoCheck)
                 }, enabled = text.isNotEmpty()) { Text("Send this text") }
             }
         }

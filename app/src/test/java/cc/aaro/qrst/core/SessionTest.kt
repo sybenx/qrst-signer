@@ -119,6 +119,14 @@ class SessionTest {
         assertTrue(uri.startsWith("https://qrst.aaro.cc/#v=1&mode=offer&p=nostr-nsec&npub=npub1"))
         assertTrue(uri.contains("relay=wss://relay.damus.io&relay=wss://nos.lol"))
         assertEquals(p.copy(relays = listOf("wss://relay.damus.io", "wss://nos.lol")), PairingUri.parse(uri))
+        // The qrst: handoff (§11.2c), as the reference's buildHandoffUri writes it.
+        val npub = Nip19.npub(pub)
+        val handoff = "qrst://$npub?" + uri.substringAfter('#').split('&').filter { !it.startsWith("npub=") }.joinToString("&")
+        assertTrue(PairingUri.isHandoff(handoff))
+        assertTrue(!PairingUri.isHandoff(uri))
+        assertEquals(PairingUri.parse(uri), PairingUri.parse(handoff))
+        try { PairingUri.parse(handoff.replace("qrst://", "frost://")); throw AssertionError("other scheme accepted") } catch (_: UriException) {}
+        try { PairingUri.parse(handoff.replace("v=1", "v=2")); throw AssertionError("bad version accepted") } catch (_: UriException) {}
         assertTrue(PairingUri.isPrivateHost("100.86.253.33"))
         assertTrue(PairingUri.isPrivateHost("box.tail1234.ts.net"))
         assertTrue(!PairingUri.isPrivateHost("relay.damus.io"))

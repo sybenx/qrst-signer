@@ -38,7 +38,7 @@ sealed class Screen {
     data object Settings : Screen()
     data object Log : Screen()
     /** Choose which key goes to the device behind `params`, or (params null) which key to offer by showing a code. */
-    data class PickKey(val params: PairingParams?, val viaCamera: Boolean) : Screen()
+    data class PickKey(val params: PairingParams?, val viaCamera: Boolean, val demoCheck: CodeCheck = CodeCheck.NONE) : Screen()
     data object Transfer : Screen()
 }
 
@@ -137,6 +137,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             say(linkProblem(e.code)); return
         }
         val demo = params.profile == DemoTextProfile.id
+        // §11.2c: a code handed over by qrst: came through whatever app claims that scheme.
+        val handoff = PairingUri.isHandoff(text)
+        val demoCheck = if (handoff) CodeCheck.COMPARE else CodeCheck.NONE
         if (params.profile != NsecProfile.id && !demo) {
             say("That code is for “${params.profile}”, which this app doesn't carry. It moves Nostr keys only."); return
         }
@@ -148,13 +151,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             else -> {}
         }
         if (scannerRole(params.mode) == Role.RECEIVER) {
-            if (demo) attach(Transfer.join(deps(DemoTextProfile, CodeCheck.NONE), params, viaCamera), true, null)
+            if (demo) attach(Transfer.join(deps(DemoTextProfile, demoCheck), params, viaCamera && !handoff), true, null)
             else attach(Transfer.join(deps(NsecProfile), params, viaCamera), false, null)
             return
         }
         // We are the Sender.
         if (demo) {
-            go(Screen.PickKey(params, viaCamera)); return
+            go(Screen.PickKey(params, viaCamera && !handoff, demoCheck)); return
         }
         val keys = vault.list()
         when {
@@ -169,8 +172,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         attach(Transfer.join(deps(NsecProfile), params, viaCamera), false, entry)
     }
 
-    fun sendDemoTo(params: PairingParams, viaCamera: Boolean, text: String) {
-        attach(Transfer.join(deps(DemoTextProfile, CodeCheck.NONE), params, viaCamera, text), true, null)
+    fun sendDemoTo(params: PairingParams, viaCamera: Boolean, text: String, check: CodeCheck = CodeCheck.NONE) {
+        attach(Transfer.join(deps(DemoTextProfile, check), params, viaCamera, text), true, null)
     }
 
     private fun warnFirst(): Boolean {

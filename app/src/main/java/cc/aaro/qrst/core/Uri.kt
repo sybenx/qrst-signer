@@ -107,8 +107,26 @@ object PairingUri {
         return base.substringBefore('#') + "#" + parts.joinToString("&")
     }
 
+    /** The scheme every implementation registers, by which a bounce page hands a code to an installed app (§11.2c). */
+    const val HANDOFF_SCHEME = "qrst"
+
+    /** `<scheme>://<npub>?<parameters>`: the form of §11.2c and §12.3. */
+    private val SCHEME_FORM = Regex("^([a-zA-Z][a-zA-Z0-9+.-]*)://(npub1[02-9ac-hj-np-zA-Z]+)/?\\?([^#]*)$")
+
+    /** True for a pairing URI in the `qrst:` handoff form (§11.2c). */
+    fun isHandoff(text: String): Boolean =
+        SCHEME_FORM.find(text.trim())?.groupValues?.get(1)?.lowercase() == HANDOFF_SCHEME
+
+    /** The parameters, from the https fragment (§11.2) or the `qrst:` form. No profile scheme is registered here (§12.3). */
+    private fun parameters(text: String): String? {
+        SCHEME_FORM.find(text)?.let { m ->
+            return if (m.groupValues[1].lowercase() == HANDOFF_SCHEME) "npub=${m.groupValues[2].lowercase()}&${m.groupValues[3]}" else null
+        }
+        return if ('#' in text) text.substringAfter('#') else text
+    }
+
     fun looksLikePairing(text: String): Boolean {
-        val fragment = if ('#' in text) text.substringAfter('#') else text
+        val fragment = parameters(text.trim()) ?: return false
         return Regex("(^|&)npub=npub1").containsMatchIn(fragment) && Regex("(^|&)v=").containsMatchIn(fragment)
     }
 
@@ -123,15 +141,14 @@ object PairingUri {
     private fun dec(s: String): String = try { URLDecoder.decode(s, "UTF-8") } catch (_: Exception) { s }
 
     /**
-     * Parses a pairing link, a bare fragment, or the parameters alone. Rejects an
+     * Parses a pairing link, its `qrst:` handoff form, a bare fragment, or the parameters alone. Rejects an
      * unknown `v`, a missing `mode`, `p` or token, and a bad key checksum (§11.2, §12.1).
      * A missing or unknown `check` reads as `type`.
      */
     fun parse(input: String): PairingParams {
         val text = input.trim()
-        val fragment = if ('#' in text) text.substringAfter('#') else text
         if (!looksLikePairing(text)) throw UriException("not-a-pairing-link")
-        val q = query(fragment)
+        val q = query(parameters(text)!!)
         fun get(name: String) = q.firstOrNull { it.first == name }?.second
 
         if (get("v") != VERSION.toString()) throw UriException("unknown-version")

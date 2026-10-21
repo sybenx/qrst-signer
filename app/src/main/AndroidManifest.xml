@@ -33,6 +33,14 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="qrst.aaro.cc" />
             </intent-filter>
+            <!-- The qrst: handoff (spec §11.2c): any QRST client's bounce page hands a code
+                 to whichever installed app claims this scheme. Never trusted as a camera read. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="qrst" />
+            </intent-filter>
             <!-- The reference demo's bounce page. Not verifiable by us, so the user picks the app from "Open with". -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

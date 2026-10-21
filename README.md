@@ -10,7 +10,9 @@ That's all it does. It holds keys and transfers them, in both directions. It doe
 ## How it works
 
 - **Scan a QRST code** with the app, or with the phone's camera: `https://qrst.aaro.cc/#…` links open the app
-  directly (Android App Links). A code that says *offer* makes this phone the Sender; *request* makes it the Receiver.
+  directly (Android App Links). Any other QRST client's bounce page can hand its code to this app with
+  `qrst://…` (spec §11.2c, [qr-secret-transfer#11](https://github.com/sybenx/qr-secret-transfer/pull/11)), so a
+  site like a Nostr web client needs no part of qrst.aaro.cc. A code that says *offer* makes this phone the Sender; *request* makes it the Receiver.
 - **Receive a key**: the phone shows a code. Scan it from the device that has the key, type the five digits this
   phone shows into that device, then tap *Keep it*.
 - **Send a key**: pick a key; the phone shows a code for the receiving device to scan. Or scan the receiving device's code.
