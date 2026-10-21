@@ -196,10 +196,14 @@ class Transfer<T> private constructor(
         )
     }
 
-    fun enterCode(digits: String) = run { apply(session.enterCode(digits)) }
-    fun confirmMatch() = run { apply(session.confirmMatch()) }
+    /** Sender: `payload` may be handed over here instead of at the start (Session). */
+    fun enterCode(digits: String, payload: T? = null) = run { try { apply(session.enterCode(digits, payload)) } finally { wipePayload(payload) } }
+    fun confirmMatch(payload: T? = null) = run { try { apply(session.confirmMatch(payload)) } finally { wipePayload(payload) } }
     fun rejectMatch() = run { apply(session.rejectMatch()) }
-    fun release() = run { apply(session.release()) }
+    fun release(payload: T? = null) = run { try { apply(session.release(payload)) } finally { wipePayload(payload) } }
+
+    /** A key handed over at release has been encoded into the session by now; this copy can go. */
+    private fun wipePayload(payload: T?) { (payload as? ByteArray)?.fill(0) }
     fun decline() = run { apply(session.decline()) }
     fun accept() = run { apply(session.accept()) }
     fun advance() = run { apply(session.advance()) }

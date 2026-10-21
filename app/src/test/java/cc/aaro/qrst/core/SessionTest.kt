@@ -68,12 +68,13 @@ class SessionTest {
 
     @Test fun flowB_senderShows_receiverScans() {
         val key = secret()
-        val snd = Session(Role.SENDER, true, NsecProfile, secret(), env, payload = key.copyOf())
+        // The key is handed over only at release, as the app does after the credential check.
+        val snd = Session<ByteArray>(Role.SENDER, true, NsecProfile, secret(), env)
         val rcv = Session(Role.RECEIVER, false, NsecProfile, secret(), env, peerPub = snd.pub, token = snd.token, peerCheck = CodeCheck.TYPE)
         pump(snd, rcv, rcv.start(), rcv)
         assertEquals(Phase.CODE, rcv.view().phase)
         assertEquals(Phase.RELEASE, snd.view().phase)
-        val released = snd.enterCode(rcv.view().code!!)
+        val released = snd.enterCode(rcv.view().code!!, key.copyOf())
         deliver(released, rcv)
         assertEquals(Phase.ACCEPT, rcv.view().phase)
         val accepted = rcv.accept()

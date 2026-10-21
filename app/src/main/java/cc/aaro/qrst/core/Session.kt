@@ -83,7 +83,10 @@ class Session<T>(
     private val env: Env,
     /** Contacting party only: the burner public key read from the QR. */
     private val peerPub: String? = null,
-    /** Sender only: what to send. */
+    /**
+     * Sender only: what to send. May instead be handed to the release call, so that a
+     * platform credential check can unlock it at the moment of release (nostr-nsec).
+     */
     payload: T? = null,
     private val isBlocked: (String) -> Boolean = { false },
     /** This device's setting. Defaults to the strictest. */
@@ -148,9 +151,8 @@ class Session<T>(
             require(isValidPublicKey(peerPub)) { "session: the key from the QR is not a valid key" }
         }
         if (role == Role.SENDER) {
-            requireNotNull(payload) { "session: the Sender needs something to send" }
             // Encoded now so that a payload that does not fit fails before anything is on the wire.
-            payloadContent = profile.encode(payload)
+            if (payload != null) payloadContent = profile.encode(payload)
         } else {
             require(payload == null) { "session: a Receiver sends no payload" }
         }
@@ -417,10 +419,11 @@ class Session<T>(
     }
 
     /** Sender, check `type`: the user typed the five digits shown on the Receiver. Compared here and only here (§9.2). */
-    fun enterCode(digits: String): List<Effect<T>> {
+    fun enterCode(digits: String, payload: T? = null): List<Effect<T>> {
         if (!canRelease(CodeCheck.TYPE)) return emptyList()
         if (expired()) return tick()
         require(Regex("^[0-9]{5}$").matches(digits)) { "session: a pairing code is exactly five digits" }
+        provide(payload)
         val ready = peers.values.filter { it.sas != null }
         val matches = ready.filter { equalAscii(it.sas!!, digits) }
         if (matches.size == 1) return releaseTo(matches[0])
@@ -428,9 +431,10 @@ class Session<T>(
     }
 
     /** Sender, check `compare`: the user says the code on screen is the one on the other device. */
-    fun confirmMatch(): List<Effect<T>> {
+    fun confirmMatch(payload: T? = null): List<Effect<T>> {
         if (!canRelease(CodeCheck.COMPARE)) return emptyList()
         if (expired()) return tick()
+        provide(payload)
         return comparing()?.let { releaseTo(it) } ?: emptyList()
     }
 
@@ -446,12 +450,18 @@ class Session<T>(
     }
 
     /** Sender, check `none`: the user confirmed the release prompt. Only ever to a lone responder. */
-    fun release(): List<Effect<T>> {
+    fun release(payload: T? = null): List<Effect<T>> {
         if (!canRelease(CodeCheck.NONE)) return emptyList()
         if (expired()) return tick()
+        provide(payload)
         val ready = peers.values.filter { it.sas != null }
         if (ready.size != 1 || (showing && contacted.size != 1)) return emptyList()
         return releaseTo(ready[0])
+    }
+
+    private fun provide(payload: T?) {
+        if (payload != null && payloadContent == null) payloadContent = profile.encode(payload)
+        checkNotNull(payloadContent) { "session: the Sender has nothing to send" }
     }
 
     private fun canRelease(check: CodeCheck) = phase == Phase.RELEASE && role == Role.SENDER && peak == check

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>QRST Signer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>QRST Signer</h1>
+  <p class="lede">An Android app that moves a Nostr key between your devices by QR code, using
+    <a href="https://github.com/sybenx/qr-secret-transfer">QR Secret Transfer</a>.</p>
+
+  <section id="pairing" hidden>
+    <h2 id="what">A QRST pairing code</h2>
+    <p id="detail"></p>
+    <p><a id="open" class="button" href="#">Open in QRST Signer</a></p>
+    <p class="small">If the button does nothing, the app isn't installed, or this browser won't hand links to apps.
+      Copy the link and paste it into the app's scan screen ("Paste a pairing link instead").</p>
+    <p><button id="copy" type="button">Copy the pairing link</button> <span id="copied" hidden>Copied.</span></p>
+    <p class="small">This page never sent the code anywhere: everything after the <code>#</code> stays in your browser.</p>
+  </section>
+
+  <section id="about">
+    <h2>Get the app</h2>
+    <p>Releases: <a href="https://github.com/sybenx/qrst-signer/releases">github.com/sybenx/qrst-signer</a>.
+      With <a href="https://github.com/ImranR98/Obtainium">Obtainium</a>, add that URL to get updates.</p>
+    <p>Once installed, scanning a QRST code with the phone's camera opens the app directly.</p>
+  </section>
+</main>
+<script src="bounce.js"></script>
+</body>
+</html>
