@@ -70,6 +70,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.biometric:biometric:1.1.0")
+    // biometric 1.1.0 brings fragment 1.2, whose FragmentActivity rejects the request codes
+    // the Activity Result API uses: the camera permission request crashed the scanner.
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("androidx.camera:camera-camera2:1.4.1")
     implementation("androidx.camera:camera-lifecycle:1.4.1")
     implementation("androidx.camera:camera-view:1.4.1")
