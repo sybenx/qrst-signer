@@ -12,37 +12,33 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,12 +48,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cc.aaro.qrst.Active
@@ -68,7 +65,7 @@ import cc.aaro.qrst.core.MAX_ATTEMPTS
 import cc.aaro.qrst.core.Mode
 import cc.aaro.qrst.core.Outcome
 import cc.aaro.qrst.core.Phase
-import cc.aaro.qrst.core.Role
+import cc.aaro.qrst.core.Role as QrstRole
 import cc.aaro.qrst.net.TransferView
 import cc.aaro.qrst.vault.VaultEntry
 
@@ -76,93 +73,102 @@ import cc.aaro.qrst.vault.VaultEntry
 fun App(model: AppModel) {
     val state by model.state.collectAsState()
     QrstTheme {
-        androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-            when (val s = state.screen) {
-                Screen.Home -> Home(model, state.keys, state.demo)
-                Screen.Scan -> ScanScreen(model)
-                Screen.Import -> ImportScreen(model)
-                Screen.Settings -> SettingsScreen(model, state.demo)
-                Screen.Log -> LogScreen(model)
-                is Screen.PickKey -> PickKeyScreen(model, s, state.keys, state.demo)
-                Screen.Transfer -> {
-                    val active = state.active
-                    val view = state.view
-                    if (active != null && view != null) TransferScreen(model, active, view) else model.go(Screen.Home)
+        Surface(Modifier.fillMaxSize(), color = Vault.Ground, contentColor = Vault.Text) {
+            Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                when (val s = state.screen) {
+                    Screen.Home -> Home(model, state.keys, state.demo)
+                    Screen.Scan -> ScanScreen(model)
+                    Screen.Import -> ImportScreen(model)
+                    Screen.Settings -> SettingsScreen(model, state.demo)
+                    Screen.Log -> LogScreen(model)
+                    is Screen.PickKey -> PickKeyScreen(model, s, state.keys, state.demo)
+                    Screen.Transfer -> {
+                        val active = state.active
+                        val view = state.view
+                        if (active != null && view != null) TransferScreen(model, active, view) else model.go(Screen.Home)
+                    }
+                }
+                state.message?.let { msg ->
+                    AlertDialog(
+                        onDismissRequest = { model.say(null) },
+                        containerColor = Vault.Surface,
+                        confirmButton = { TextButton({ model.say(null) }) { Text("OK", color = Vault.Text) } },
+                        text = { Text(msg, color = Vault.Text) },
+                    )
+                }
+                if (state.interferenceWarning) {
+                    AlertDialog(
+                        onDismissRequest = {},
+                        containerColor = Vault.Surface,
+                        title = { Text("Several transfers failed", color = Vault.Text) },
+                        text = { Text("Three or more transfers ended on wrong digits in the last hour. That can be mistyping, but it can also mean someone is trying to get in the middle. Make sure the other device is yours and in front of you.", color = Vault.Text) },
+                        confirmButton = { TextButton({ model.acknowledgeWarning() }) { Text("I understand", color = Vault.Text) } },
+                    )
                 }
             }
-            state.message?.let { msg ->
-                AlertDialog(
-                    onDismissRequest = { model.say(null) },
-                    confirmButton = { TextButton({ model.say(null) }) { Text("OK") } },
-                    text = { Text(msg) },
-                )
-            }
-            if (state.interferenceWarning) {
-                AlertDialog(
-                    onDismissRequest = {},
-                    title = { Text("Several transfers failed") },
-                    text = { Text("Three or more transfers ended on a wrong pairing code in the last hour. That can be mistyping, but it can also mean someone is trying to get in the middle. Make sure the other device is yours and in front of you.") },
-                    confirmButton = { TextButton({ model.acknowledgeWarning() }) { Text("I understand") } },
-                )
-            }
-        }
         }
     }
 }
 
-@Composable
-private fun TopBar(title: String, onBack: (() -> Unit)?, actions: @Composable () -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (onBack != null) IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } else Spacer(Modifier.width(16.dp))
-        Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-        actions()
-    }
+private fun copy(context: Context, label: String, text: String) {
+    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(label, text))
 }
 
 @Composable
-private fun Page(content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        content()
-    }
-}
-
-private fun shortNpub(npub: String) = npub.take(12) + "…" + npub.takeLast(6)
+private fun fieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = Vault.Muted, unfocusedBorderColor = Vault.Line, cursorColor = Vault.Text,
+    focusedLabelColor = Vault.Muted, unfocusedLabelColor = Vault.Muted, focusedTextColor = Vault.Text, unfocusedTextColor = Vault.Text,
+)
 
 // ---- home -------------------------------------------------------------------------------
 
 @Composable
 private fun Home(model: AppModel, keys: List<VaultEntry>, demo: Boolean) {
     var editing by remember { mutableStateOf<VaultEntry?>(null) }
-    Column(Modifier.fillMaxSize()) {
-        TopBar("QRST Signer", null) {
-            IconButton({ model.go(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }
-        }
-        Page {
-            Text(
-                "Moves a Nostr key between your devices by QR code. The key travels sealed over public relays, and only after you check five digits across the two screens.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button({ model.go(Screen.Scan) }, Modifier.fillMaxWidth().height(56.dp)) {
-                Icon(Icons.Filled.QrCodeScanner, null); Spacer(Modifier.width(10.dp)); Text("Scan a QRST code")
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton({ model.receiveByShowing() }, Modifier.weight(1f)) { Text("Receive a key") }
-                OutlinedButton({ model.go(Screen.PickKey(null, true)) }, Modifier.weight(1f), enabled = keys.isNotEmpty() || demo) { Text("Send a key") }
-            }
-            HorizontalDivider()
-            Text("Keys on this phone", style = MaterialTheme.typography.titleMedium)
-            if (keys.isEmpty()) {
-                Text("None yet. Receive one from another device, or paste an nsec.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            for (k in keys) KeyRow(k) { editing = k }
-            TextButton({ model.go(Screen.Import) }) { Text("Add a key by pasting an nsec") }
-            if (demo) {
-                HorizontalDivider()
-                Text("Test mode: the reference demo's text profile", style = MaterialTheme.typography.titleSmall, color = Receipt)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton({ model.receiveByShowing(CodeCheck.COMPARE) }, Modifier.weight(1f)) { Text("Receive text") }
+    Frame(
+        onBack = null,
+        actions = {
+            // C's round Scan button: the one thing most visits come here to do.
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier.size(150.dp).clip(CircleShape).background(Vault.Surface).border(2.dp, Vault.Line, CircleShape)
+                        .clickable(role = Role.Button) { model.go(Screen.Scan) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Filled.QrCodeScanner, null, tint = Vault.Text, modifier = Modifier.size(44.dp))
+                        Text("Scan a code", fontFamily = PlexSans, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Vault.Text)
+                    }
                 }
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                EdgeButton("Receive a key", { model.receiveByShowing() }, color = Vault.Teal, edge = Vault.TealEdge, modifier = Modifier.weight(1f))
+                EdgeButton("Send a key", { model.go(Screen.PickKey(null, true)) }, color = Vault.Amber, edge = Vault.AmberEdge, modifier = Modifier.weight(1f), enabled = keys.isNotEmpty() || demo)
+            }
+        },
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { Eyebrow("QRST Signer") }
+            Box(
+                Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).border(1.dp, Vault.Line, RoundedCornerShape(12.dp))
+                    .clickable(role = Role.Button) { model.go(Screen.Settings) },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.Settings, "Settings", tint = Vault.Muted) }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Your keys", fontFamily = PlexSans, fontWeight = FontWeight.SemiBold, fontSize = 34.sp, color = Vault.Text)
+            Note("Held in this phone's secure hardware. They leave only by a transfer you approve.")
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            for (k in keys) KeyCard(k) { editing = k }
+            DashedRow("+ Paste an nsec") { model.go(Screen.Import) }
+        }
+        if (demo) {
+            Panel(edge = Vault.TealEdge) {
+                Eyebrow("Test mode", Vault.Teal)
+                Note("The reference demo's text profile, for trying this app against sybenx.github.io/qr-secret-transfer.")
+                EdgeButton("Receive test text", { model.receiveByShowing(CodeCheck.COMPARE) }, color = Vault.Teal, edge = Vault.TealEdge)
             }
         }
     }
@@ -170,50 +176,62 @@ private fun Home(model: AppModel, keys: List<VaultEntry>, demo: Boolean) {
 }
 
 @Composable
-private fun KeyRow(k: VaultEntry, onClick: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().clip12().background(MaterialTheme.colorScheme.surfaceVariant).clickable(onClick = onClick).padding(14.dp),
+private fun KeyCard(k: VaultEntry, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Vault.Surface).border(1.dp, Vault.Edge, RoundedCornerShape(16.dp))
+            .clickable(role = Role.Button, onClick = onClick).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(k.label, fontWeight = FontWeight.SemiBold)
-        Text(shortNpub(k.npub), fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (k.viaTransfer) Text("Arrived by transfer", fontSize = 12.sp, color = Receipt)
+        KeyPattern(k.pub)
+        Column(Modifier.weight(1f)) {
+            Text(displayName(k.label), fontFamily = PlexSans, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = Vault.Text, maxLines = 1)
+            Text(shortNpub(k.npub), fontFamily = PlexMono, fontSize = 13.sp, color = Vault.Muted)
+        }
+        if (k.viaTransfer) Pill("received", Vault.Teal, Vault.TealEdge)
     }
 }
 
-private fun Modifier.clip12() = clip(RoundedCornerShape(12.dp))
+@Composable
+private fun DashedRow(text: String, onClick: () -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(16.dp))
+            .border(1.dp, Vault.Line, RoundedCornerShape(16.dp)).clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Text(text, fontFamily = PlexSans, fontSize = 15.sp, color = Vault.Muted) }
+}
 
 @Composable
 private fun KeyDialog(model: AppModel, k: VaultEntry, onDismiss: () -> Unit) {
-    var label by remember { mutableStateOf(k.label) }
+    var label by remember { mutableStateOf(displayName(k.label).takeIf { it != "Unnamed key" } ?: "") }
     var confirmDelete by remember { mutableStateOf(false) }
     val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(k.label) },
+        containerColor = Vault.Surface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                KeyPattern(k.pub, 36.dp)
+                Text(displayName(k.label), color = Vault.Text)
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(k.npub, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                TextButton({ copy(context, "npub", k.npub) }) { Text("Copy npub") }
-                OutlinedTextField(label, { label = it }, label = { Text("Name") }, singleLine = true)
+                Text(k.npub, fontFamily = PlexMono, fontSize = 12.sp, color = Vault.Muted)
+                QuietLink("Copy npub", { copy(context, "npub", k.npub) }, Vault.Text)
+                OutlinedTextField(label, { label = it }, label = { Text("Name") }, singleLine = true, colors = fieldColors())
                 if (confirmDelete) {
-                    Text(
-                        "This deletes the copy on this phone only. Nostr keys can't be revoked: any other device or app holding this key keeps it.",
-                        color = Danger,
-                    )
+                    Text("This deletes the copy on this phone only. Nostr keys can't be revoked: any other device or app holding this key keeps it.", color = Vault.Danger, fontSize = 14.sp)
                 }
             }
         },
-        confirmButton = { TextButton({ model.rename(k, label.trim().ifEmpty { k.label }); onDismiss() }) { Text("Save") } },
+        confirmButton = { TextButton({ model.rename(k, label.trim().ifEmpty { k.label }); onDismiss() }) { Text("Save", color = Vault.Text) } },
         dismissButton = {
             TextButton({ if (confirmDelete) { model.delete(k); onDismiss() } else confirmDelete = true }) {
-                Text(if (confirmDelete) "Delete this phone's copy" else "Delete…", color = Danger)
+                Text(if (confirmDelete) "Delete this phone's copy" else "Delete…", color = Vault.Danger)
             }
         },
     )
-}
-
-private fun copy(context: Context, label: String, text: String) {
-    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(label, text))
 }
 
 // ---- scan / import / pick ---------------------------------------------------------------
@@ -224,16 +242,18 @@ private fun ScanScreen(model: AppModel) {
     var pasting by remember { mutableStateOf(false) }
     var link by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize()) {
-        TopBar("Scan a QRST code", { model.go(Screen.Home) })
-        Box(Modifier.fillMaxWidth().weight(1f).padding(16.dp).clip(RoundedCornerShape(16.dp))) {
-            QrScanner { model.openLink(it, viaCamera = true) }
-        }
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+        Frame(onBack = { model.go(Screen.Home) }) {
+            Eyebrow("Scan")
+            Headline("Point at a QRST code")
+            Box(Modifier.fillMaxWidth().height(LocalRoom.current * 0.55f).clip(RoundedCornerShape(20.dp)).border(1.dp, Vault.Line, RoundedCornerShape(20.dp))) {
+                QrScanner { model.openLink(it, viaCamera = true) }
+            }
+            Note("The code says which way the key goes. Nothing moves until digits are checked on both screens.")
             if (!pasting) {
-                TextButton({ pasting = true }) { Text("Paste a pairing link instead") }
+                QuietLink("Paste a pairing link instead", { pasting = true })
             } else {
-                OutlinedTextField(link, { link = it }, label = { Text("Pairing link") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                Button({ model.openLink(link, viaCamera = false) }, enabled = link.isNotBlank()) { Text("Use this link") }
+                OutlinedTextField(link, { link = it }, label = { Text("Pairing link") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = fieldColors())
+                MainButton("Use this link", { model.openLink(link, viaCamera = false) }, enabled = link.isNotBlank())
             }
         }
     }
@@ -246,19 +266,10 @@ private fun ImportScreen(model: AppModel) {
     var label by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    Column(Modifier.fillMaxSize()) {
-        TopBar("Add a key", { model.go(Screen.Home) })
-        Page {
-            Text("Paste an nsec (or 64 hex characters). It is encrypted with a key held in this phone's secure hardware, and never leaves except by a QRST transfer you approve.")
-            OutlinedTextField(
-                nsec, { nsec = it.trim() }, label = { Text("nsec1…") }, singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(label, { label = it }, label = { Text("Name (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            error?.let { Text(it, color = Danger) }
-            Button({
+    Frame(
+        onBack = { model.go(Screen.Home) },
+        actions = {
+            MainButton("Keep this key", {
                 model.importKey(nsec, label.trim()) { problem ->
                     if (problem == null) {
                         // The nsec was pasted: don't leave it in the clipboard.
@@ -267,9 +278,21 @@ private fun ImportScreen(model: AppModel) {
                         model.go(Screen.Home)
                     } else error = problem
                 }
-            }, enabled = nsec.isNotEmpty()) { Text("Keep this key") }
-            Text("The clipboard is cleared once the key is stored.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+            }, enabled = nsec.isNotEmpty())
+        },
+    ) {
+        Eyebrow("Add a key")
+        Headline("Paste an nsec")
+        Lede("Or 64 hex characters. It's encrypted with a key in this phone's secure hardware, and leaves only by a transfer you approve.", Vault.Muted)
+        OutlinedTextField(
+            nsec, { nsec = it.trim() }, label = { Text("nsec1…") }, singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+            modifier = Modifier.fillMaxWidth(), colors = fieldColors(),
+        )
+        OutlinedTextField(label, { label = it }, label = { Text("Name it (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors())
+        error?.let { Note(it, Vault.Danger) }
+        Note("The clipboard is cleared once the key is stored.")
     }
 }
 
@@ -278,23 +301,23 @@ private fun PickKeyScreen(model: AppModel, s: Screen.PickKey, keys: List<VaultEn
     BackHandler { model.go(Screen.Home) }
     var text by remember { mutableStateOf("") }
     val demoLink = s.params?.profile == cc.aaro.qrst.core.DemoTextProfile.id
-    Column(Modifier.fillMaxSize()) {
-        TopBar(if (s.params == null) "Send a key" else "Which key?", { model.go(Screen.Home) })
-        Page {
-            if (!demoLink) {
-                Text(
-                    if (s.params == null) "Pick the key to send. This phone shows a QR code; scan it with the device that should receive the key."
-                    else "The other device is asking for a key. Pick which one it gets.",
-                )
-                for (k in keys) KeyRow(k) { if (s.params == null) model.sendByShowing(k) else model.sendTo(s.params, s.viaCamera, k) }
-            }
-            if (demo && (s.params == null || demoLink)) {
-                HorizontalDivider()
-                Text("Test text (reference demo profile)", color = Receipt)
-                OutlinedTextField(text, { text = it }, label = { Text("Made-up text, not a real secret") }, modifier = Modifier.fillMaxWidth())
-                Button({
+    Frame(onBack = { model.go(Screen.Home) }) {
+        Eyebrow("Send · Nostr key", Vault.Amber)
+        if (!demoLink) {
+            Headline(if (s.params == null) "Which key?" else "The other device wants a key")
+            Note(
+                if (s.params == null) "This phone then shows a code. Scan it with the device that should get the key."
+                else "Pick which one it gets. You'll check digits before anything leaves.",
+            )
+            for (k in keys) KeyCard(k) { if (s.params == null) model.sendByShowing(k) else model.sendTo(s.params, s.viaCamera, k) }
+        }
+        if (demo && (s.params == null || demoLink)) {
+            Panel(edge = Vault.TealEdge) {
+                Eyebrow("Test text", Vault.Teal)
+                OutlinedTextField(text, { text = it }, label = { Text("Made-up text, not a real secret") }, modifier = Modifier.fillMaxWidth(), colors = fieldColors())
+                EdgeButton("Send this text", {
                     if (s.params == null) model.sendDemoByShowing(text, CodeCheck.COMPARE) else model.sendDemoTo(s.params, s.viaCamera, text, s.demoCheck)
-                }, enabled = text.isNotEmpty()) { Text("Send this text") }
+                }, enabled = text.isNotEmpty())
             }
         }
     }
@@ -304,31 +327,30 @@ private fun PickKeyScreen(model: AppModel, s: Screen.PickKey, keys: List<VaultEn
 
 @Composable
 private fun SettingsScreen(model: AppModel, demo: Boolean) {
-    BackHandler { model.go(Screen.Home) }
     var relays by remember { mutableStateOf(model.store.configured().joinToString("\n")) }
-    Column(Modifier.fillMaxSize()) {
-        TopBar("Settings", { model.store.setConfigured(relays.lines().filter { it.isNotBlank() }); model.go(Screen.Home) })
-        Page {
-            Text("Relays", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Tried first when this phone shows a code, one wss:// address per line. Every relay is tested before it's named in a code, and relays that worked before are remembered. Leave empty to start from a built-in list.",
-                fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedTextField(relays, { relays = it }, modifier = Modifier.fillMaxWidth().height(140.dp), textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
-            HorizontalDivider()
+    val leave = { model.store.setConfigured(relays.lines().filter { it.isNotBlank() }); model.go(Screen.Home) }
+    BackHandler { leave() }
+    Frame(onBack = leave) {
+        Eyebrow("Settings")
+        Headline("Relays")
+        Note("Tried first when this phone shows a code, one wss:// address per line. Every relay is tested before it's named in a code, and relays that worked before are remembered.")
+        OutlinedTextField(
+            relays, { relays = it }, modifier = Modifier.fillMaxWidth().height(130.dp), colors = fieldColors(),
+            textStyle = androidx.compose.ui.text.TextStyle(fontFamily = PlexMono, fontSize = 14.sp, color = Vault.Text),
+        )
+        Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Test mode")
-                    Text("Also carry the reference demo's text profile, to try this app against sybenx.github.io/qr-secret-transfer with made-up text.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Test mode", fontFamily = PlexSans, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = Vault.Text)
+                    Note("Also carry the reference demo's text profile, with made-up text.")
                 }
-                Switch(demo, { model.setDemo(it) })
+                Switch(demo, { model.setDemo(it) }, colors = SwitchDefaults.colors(checkedTrackColor = Vault.Teal, checkedThumbColor = Vault.Ground))
             }
-            HorizontalDivider()
-            TextButton({ model.store.setConfigured(relays.lines().filter { it.isNotBlank() }); model.go(Screen.Log) }) { Text("Transfer log") }
-            Text(
-                "What this protects against: a stranger who photographs a code gets a pairing code that won't match, and nothing moves. What it can't protect against: sending your key to a device that isn't yours. Only you saying no at the send prompt stops that.",
-                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        }
+        DashedRow("Transfer log") { model.store.setConfigured(relays.lines().filter { it.isNotBlank() }); model.go(Screen.Log) }
+        Panel {
+            Eyebrow("What this protects")
+            Note("A stranger who photographs a code gets digits that won't match, and nothing moves. What it can't protect against: sending your key to a device that isn't yours. Only you saying no at the send prompt stops that.")
         }
     }
 }
@@ -337,18 +359,18 @@ private fun SettingsScreen(model: AppModel, demo: Boolean) {
 private fun LogScreen(model: AppModel) {
     BackHandler { model.go(Screen.Settings) }
     val records = remember { model.store.records() }
-    Column(Modifier.fillMaxSize()) {
-        TopBar("Transfer log", { model.go(Screen.Settings) })
-        Page {
-            if (records.isEmpty()) Text("No transfers yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            for (r in records) {
-                val ts = (r["ts"] as? Long ?: 0L) * 1000
-                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp)).padding(12.dp)) {
-                    Text("${r["role"]} · ${r["outcome"]} · ${r["profile"]}", fontWeight = FontWeight.SemiBold)
-                    Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(ts)), fontSize = 13.sp)
-                    Text("Digits ${r["sas"]} · check ${r["check"]}${if (r["multi"] == true) " · another device also answered" else ""}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Peer ${(r["peer"] as? String)?.take(16)}…", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+    Frame(onBack = { model.go(Screen.Settings) }) {
+        Eyebrow("Settings")
+        Headline("Transfer log")
+        if (records.isEmpty()) Note("No transfers yet.")
+        for (r in records) {
+            val ts = (r["ts"] as? Long ?: 0L) * 1000
+            val sent = r["role"] == "sender"
+            Panel(edge = if (sent) Vault.AmberEdge else Vault.TealEdge) {
+                Text("${if (sent) "Sent" else "Received"} · ${r["outcome"]}", fontFamily = PlexSans, fontWeight = FontWeight.Medium, color = if (sent) Vault.Amber else Vault.Teal)
+                Note(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(ts)), Vault.Text)
+                Note("Digits ${r["sas"]} · check ${r["check"]} · ${r["profile"]}${if (r["multi"] == true) " · another device also answered" else ""}")
+                Text("Peer ${(r["peer"] as? String)?.take(16)}…", fontFamily = PlexMono, fontSize = 12.sp, color = Vault.Muted)
             }
         }
     }
@@ -359,105 +381,107 @@ private fun LogScreen(model: AppModel) {
 @Composable
 private fun TransferScreen(model: AppModel, active: Active, view: TransferView<*>) {
     val s = view.session
-    val ended = s.phase == Phase.ENDED
     BackHandler { model.closeTransfer() }
-    val title = when {
-        view.role == Role.SENDER -> if (active.demo) "Send text" else "Send a key"
-        else -> if (active.demo) "Receive text" else "Receive a key"
-    }
-    Column(Modifier.fillMaxSize()) {
-        TopBar(title, { model.closeTransfer() })
-        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f)) {
-        val room = maxHeight
-        androidx.compose.runtime.CompositionLocalProvider(LocalRoom provides room) {
-        Page {
-            when {
-                ended -> EndedPanel(model, active, view)
-                view.stage == TransferView.Stage.RELAYS -> FindingRelays(view)
-                s.phase == Phase.WAITING && view.showing -> ShowCode(model, active, view)
-                s.phase == Phase.WAITING -> Waiting("Reaching the other device…", view)
-                s.phase == Phase.RELEASE -> ReleasePrompt(model, active, view)
-                s.phase == Phase.CODE -> ShowDigits(model, view)
-                s.phase == Phase.ACCEPT -> AcceptPrompt(model, active, view)
-                s.phase == Phase.SENT -> Waiting("Sent. Waiting for the other device to confirm it kept the key.", view)
-            }
-            if (s.multipleResponders && !ended) {
-                Text(
-                    "Another device also answered this code. If that wasn't you, someone nearby may have scanned it. Nothing was shared with them.",
-                    color = Danger, fontSize = 14.sp,
-                )
-            }
-            RelayFooter(view)
-        }
-        }
-        }
+    when {
+        s.phase == Phase.ENDED -> EndedScreen(model, active, view)
+        view.stage == TransferView.Stage.RELAYS -> WaitScreen(model, active, view, "Testing relays before showing a code")
+        s.phase == Phase.WAITING && view.showing -> ShowCodeScreen(model, active, view)
+        s.phase == Phase.WAITING -> WaitScreen(model, active, view, "Reaching the other device")
+        s.phase == Phase.RELEASE -> ReleaseScreen(model, active, view)
+        s.phase == Phase.CODE -> DigitsScreen(model, active, view)
+        s.phase == Phase.ACCEPT -> AcceptScreen(model, active, view)
+        s.phase == Phase.SENT -> WaitScreen(model, active, view, "Sent. Waiting for the other device to confirm it kept the key.")
     }
 }
 
-/** Height left for content under the top bar, so a QR can be sized to fit whole on screen. */
-private val LocalRoom = androidx.compose.runtime.staticCompositionLocalOf { 600.dp }
+private fun eyebrowFor(active: Active, view: TransferView<*>, step: String? = null): Pair<String, Color> {
+    val what = if (active.demo) "text" else "Nostr key"
+    return if (view.role == QrstRole.SENDER) "Send · $what" to Vault.Amber
+    else (if (step != null) "Receive · $step" else "Receive · $what") to Vault.Teal
+}
 
 @Composable
-private fun FindingRelays(view: TransferView<*>) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-        Text("Testing relays before showing a code…")
+private fun MultipleResponders(view: TransferView<*>) {
+    if (view.session.multipleResponders && view.session.phase != Phase.ENDED) {
+        Callout("Another device also answered this code. If that wasn't you, someone nearby may have scanned it. Nothing was shared with them.", Vault.Danger, Vault.Danger)
     }
 }
 
 @Composable
-private fun Waiting(text: String, view: TransferView<*>) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-        Text(text)
+private fun RelayDetails(view: TransferView<*>) {
+    var open by remember { mutableStateOf(false) }
+    val connected = view.relays.count { it.inUse && it.state == "open" }
+    QuietLink("$connected relay${if (connected == 1) "" else "s"} connected · ${if (open) "hide" else "details"}", { open = !open })
+    if (open) {
+        for (r in view.relays) Text("${r.url}  ${r.state}${r.why?.let { " ($it)" } ?: ""}", fontFamily = PlexMono, fontSize = 12.sp, color = Vault.Muted)
+        for (line in view.log.takeLast(30)) Text(line, fontFamily = PlexMono, fontSize = 11.sp, color = Vault.Muted)
     }
-    if (!view.connected) Text("Not connected to a relay yet. Still trying.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
-private fun ShowCode(model: AppModel, active: Active, view: TransferView<*>) {
+private fun WaitScreen(model: AppModel, active: Active, view: TransferView<*>, text: String) {
+    val (eyebrow, color) = eyebrowFor(active, view)
+    Frame(onBack = { model.closeTransfer() }) {
+        Eyebrow(eyebrow, color)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp, color = color)
+            Lede(text)
+        }
+        if (!view.connected && view.stage != TransferView.Stage.RELAYS) Note("Not connected to a relay yet. Still trying.")
+        MultipleResponders(view)
+        RelayDetails(view)
+    }
+}
+
+@Composable
+private fun ShowCodeScreen(model: AppModel, active: Active, view: TransferView<*>) {
     val uri = view.uri ?: return
     val context = LocalContext.current
-    val config = androidx.compose.ui.platform.LocalConfiguration.current
+    val config = LocalConfiguration.current
     // §11.2b: a mode=offer code, which makes whoever scans it the Sender, carries more weight.
     val offer = view.mode == Mode.OFFER
     val what = if (active.demo) "text" else "Nostr key"
-    // The whole code has to be on screen at once: on a short, wide screen (a handheld in
-    // landscape) it is sized to the height, with the words beside it.
-    val wide = config.screenWidthDp > config.screenHeightDp
-    // Page padding is 8 dp top and bottom; keep a little more so nothing touches the edge.
-    val room = LocalRoom.current - 24.dp
-    val side = if (wide) minOf(room, (config.screenWidthDp * 0.6f).dp) else minOf((config.screenWidthDp - 40).dp, room)
+    val (eyebrow, color) = eyebrowFor(active, view, "step 1 of 3")
     KeepBright()
-
-    val words: @Composable () -> Unit = {
-        Text(
-            if (offer) "Scanning this sends a $what from your other device to this phone."
-            else "This phone is sending a $what. Scan this with the device that should receive it.",
-            style = if (offer) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
-            fontWeight = if (offer) FontWeight.SemiBold else FontWeight.Normal,
-        )
-        if (!offer && active.entry != null) Text("Key: ${active.entry.label}", color = Release)
-        Text("Only show this to your own devices. Whoever scans it can answer it.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton({ copy(context, "QRST pairing link", uri) }) { Text("Copy the link instead") }
-    }
-    val code: @Composable () -> Unit = {
-        Box(
-            Modifier.size(side)
-                .border(if (offer) 6.dp else 1.dp, if (offer) Release else MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-                .padding(if (offer) 10.dp else 6.dp),
-        ) {
-            QrImage(uri, Modifier.fillMaxSize())
+    Frame(onBack = { model.closeTransfer() }) {
+        val wide = config.screenWidthDp > config.screenHeightDp
+        val room = LocalRoom.current - 24.dp
+        val side = if (wide) minOf(room, (config.screenWidthDp * 0.6f).dp) else minOf((config.screenWidthDp - 44).dp, room - 150.dp).coerceAtLeast(200.dp)
+        val words: @Composable () -> Unit = {
+            Eyebrow(eyebrow, color)
+            Text(
+                if (offer) "Scan this with the device that has the key. It sends the $what here."
+                else "Scan this with the device that should get the $what.",
+                fontFamily = PlexSans, fontWeight = if (offer) FontWeight.SemiBold else FontWeight.Normal, fontSize = 18.sp, lineHeight = 25.sp, color = Vault.Text,
+            )
+            if (!offer && active.entry != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    KeyPattern(active.entry.pub, 28.dp)
+                    Text(displayName(active.entry.label), fontFamily = PlexSans, fontWeight = FontWeight.Medium, color = Vault.Amber)
+                }
+            }
         }
-    }
-    if (wide) {
-        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            code()
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) { words() }
+        val code: @Composable () -> Unit = {
+            Box(
+                Modifier.size(side).clip(RoundedCornerShape(18.dp))
+                    .border(if (offer) 6.dp else 1.dp, if (offer) Vault.Amber else Vault.Line, RoundedCornerShape(18.dp))
+                    .padding(if (offer) 10.dp else 6.dp),
+            ) { QrImage(uri, Modifier.fillMaxSize()) }
         }
-    } else {
-        words()
-        code()
+        val extras: @Composable () -> Unit = {
+            Note("Only show this to your own devices. Whoever scans it can answer it.")
+            QuietLink("Copy the link instead", { copy(context, "QRST pairing link", uri) }, Vault.Text)
+            MultipleResponders(view)
+            RelayDetails(view)
+        }
+        if (wide) {
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                code()
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) { words(); extras() }
+            }
+        } else {
+            words(); code(); extras()
+        }
     }
 }
 
@@ -474,29 +498,31 @@ private fun KeepBright() {
 }
 
 @Composable
-private fun ShowDigits(model: AppModel, view: TransferView<*>) {
+private fun DigitsScreen(model: AppModel, active: Active, view: TransferView<*>) {
     val code = view.session.code
-    if (code == null) {
-        Text("Nothing to compare at this level. Confirm on the other device.")
-        return
-    }
-    Text(
-        if (view.session.check == CodeCheck.TYPE) "Type these digits on the device that's sending" else "Check the other device shows these digits",
-        style = MaterialTheme.typography.titleMedium,
-    )
-    Text(code.chunked(1).joinToString(" "), fontSize = 54.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-    Text("These digits belong to this transfer only. They are not a PIN.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    if (view.showing) {
-        TextButton({ model.advance() }, enabled = true) {
-            Text("The other device rejected these digits; show the next")
+    val (eyebrow, color) = eyebrowFor(active, view, "step 2 of 3")
+    Frame(onBack = { model.closeTransfer() }) {
+        Eyebrow(eyebrow, color)
+        if (code == null) {
+            Headline("Confirm on the other device")
+            Note("No digits are checked at this level.")
+        } else {
+            Headline(if (view.session.check == CodeCheck.TYPE) "Type these on the device that's sending" else "Check the other device shows these")
+            Spacer(Modifier.height(8.dp))
+            DigitReadout(code, Vault.Teal, Vault.TealGround, Vault.TealEdge)
+            Note("These digits belong to this transfer only. They are not a PIN.")
         }
+        RelayChips(view.relays.filter { it.inUse }.map { relayName(it.url) to (it.state == "open") })
+        MultipleResponders(view)
+        if (view.showing) QuietLink("The other device rejected these digits", { model.advance() })
+        RelayDetails(view)
     }
 }
 
 @Composable
-private fun ReleasePrompt(model: AppModel, active: Active, view: TransferView<*>) {
+private fun ReleaseScreen(model: AppModel, active: Active, view: TransferView<*>) {
     val s = view.session
-    var digits by remember(rememberKey(view)) { mutableStateOf("") }
+    var digits by remember(s.attemptsLeft) { mutableStateOf("") }
     var attested by remember { mutableStateOf(false) }
     var allowSend by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
@@ -505,96 +531,117 @@ private fun ReleasePrompt(model: AppModel, active: Active, view: TransferView<*>
     val maxFriction = origin != null || !view.viaCamera
     val receiveOnly = active.entry?.viaTransfer == true
     val what = if (active.demo) "text" else "key"
-
-    Text(
-        "This is not a login. You are about to give another device your $what.",
-        style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Release,
-    )
-    Text(
-        if (active.demo) "The text itself leaves this phone. Once it is sent it can't be taken back."
-        else "Your Nostr key itself leaves this phone${active.entry?.let { " (${it.label})" } ?: ""}. The other device keeps a working copy of this identity for good. Nostr keys can't be rotated or revoked, so nothing you do later takes it back.",
-    )
-    Text(
-        "The other device: " + (origin?.let { "a web page claiming to be $it (not verified)" } ?: "an app, by its own account (not verified)"),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    if (!view.viaCamera) {
-        Text(
-            "This request didn't come from this app's camera. It was opened as a link, from the camera app or another app, so nothing proves the code was on a screen in front of you.",
-            color = Danger,
-        )
-    }
-    if (receiveOnly) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("This key arrived on this phone by transfer, so the phone is receive-only for it. Allow sending it this once?", Modifier.weight(1f), fontSize = 14.sp)
-            Switch(allowSend, { allowSend = it })
-        }
-    }
-    if (s.ready > 1 || s.multipleResponders) {
-        Text("More than one device answered this code. Only release to the one in front of you.", color = Danger)
-    }
-
-    when (s.check) {
-        CodeCheck.TYPE -> {
-            Text("Type the digits shown on your other device", style = MaterialTheme.typography.titleMedium)
-            DigitField(digits, { digits = it }, focus)
-            if (s.attemptsLeft < MAX_ATTEMPTS) Text("Those digits didn't match. ${s.attemptsLeft} tries left.", color = Danger)
-        }
-        CodeCheck.COMPARE -> {
-            Text("Does the other device show these digits?", style = MaterialTheme.typography.titleMedium)
-            Text((s.compare ?: "").chunked(1).joinToString(" "), fontSize = 44.sp, fontFamily = FontFamily.Monospace)
-            if (s.attemptsLeft < MAX_ATTEMPTS) Text("${s.attemptsLeft} tries left.", color = Danger)
-        }
-        CodeCheck.NONE -> Text("No digits are checked at this level. The $what goes to whichever device answered the code.", color = Danger)
-    }
-    if (maxFriction) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(attested, { attested = it })
-            Text("I scanned this code myself, from a screen in front of me", fontSize = 14.sp)
-        }
-    }
-
+    val gated = s.check == CodeCheck.TYPE || maxFriction || receiveOnly
     val ready = (s.check != CodeCheck.TYPE || digits.length == 5) && (!maxFriction || attested) && (!receiveOnly || allowSend)
-    // Declining is the prominent control; the release is not (§9.1).
-    Button({ model.decline() }, Modifier.fillMaxWidth().height(52.dp)) { Text("Don't send") }
-    if (s.check == CodeCheck.COMPARE) {
-        OutlinedButton({ model.rejectMatch() }, Modifier.fillMaxWidth()) { Text("The digits are different") }
-    }
-    TextButton(
-        { model.release(digits.takeIf { it.length == 5 }); digits = "" },
-        Modifier.fillMaxWidth(), enabled = ready,
+
+    Frame(
+        onBack = { model.closeTransfer() },
+        actions = {
+            // §9.1 (spec PR #13): declining comes first and is never the smaller control.
+            // Sending stays visibly off until the user has done what this screen asks,
+            // and only then leads. With nothing to do first, declining stays prominent.
+            if (gated) {
+                EdgeButton("Don't send", { model.decline() })
+                SendButton(
+                    when {
+                        s.check == CodeCheck.COMPARE -> "They match. Send my $what"
+                        origin != null -> "Send my $what to $origin"
+                        else -> "Send my $what to that device"
+                    },
+                    { model.release(digits.takeIf { it.length == 5 }); digits = "" },
+                    ready,
+                )
+            } else {
+                MainButton("Don't send", { model.decline() })
+                EdgeButton(if (s.check == CodeCheck.COMPARE) "They match. Send my $what" else "Send my $what to that device", { model.release(null) }, color = Vault.Amber, edge = Vault.AmberEdge)
+            }
+            if (s.check == CodeCheck.COMPARE) QuietLink("The digits are different", { model.rejectMatch() })
+            if (!active.demo && model.vault.needsAuth) {
+                Text("Your fingerprint or screen lock confirms it next", fontFamily = PlexSans, fontSize = 13.sp, color = Vault.Muted, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        },
     ) {
-        Text(
-            when {
-                s.check == CodeCheck.COMPARE -> "They match. Send my $what to that device"
-                origin != null -> "Send my $what to $origin"
-                else -> "Send my $what to that device"
-            },
-            color = if (ready) Release else MaterialTheme.colorScheme.outline,
+        Eyebrow(eyebrowFor(active, view).first, Vault.Amber)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Headline("This is not a login.")
+            Lede(
+                if (active.demo) "You're giving another device your text. Once sent it can't be taken back."
+                else "You're giving another device your key. It keeps a working copy for good. Nostr keys can't be revoked.",
+            )
+        }
+        val entry = active.entry
+        Facts(
+            *listOfNotNull(
+                entry?.let { "Key" to "${displayName(it.label)}  ${shortNpub(it.npub)}" },
+                "To" to (origin?.let { "a web page claiming $it" } ?: "an app, by its own account"),
+            ).toTypedArray(),
         )
+        if (!view.viaCamera) Callout("Opened as a link, not by this app's scanner. Only continue if the code is on a screen in front of you.")
+        if (s.ready > 1 || s.multipleResponders) Callout("More than one device answered this code. Only send to the one in front of you.", Vault.Danger, Vault.Danger)
+        if (receiveOnly) {
+            Panel(edge = Vault.TealEdge) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Allow sending this key once", fontFamily = PlexSans, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = Vault.Text)
+                        Note("It arrived by transfer, so this phone only receives it unless you say so.")
+                    }
+                    Switch(allowSend, { allowSend = it }, colors = SwitchDefaults.colors(checkedTrackColor = Vault.Amber, checkedThumbColor = Vault.OnAmber))
+                }
+            }
+        }
+        when (s.check) {
+            CodeCheck.TYPE -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Note("Digits shown on your other device")
+                DigitField(digits, { digits = it }, focus)
+                if (s.attemptsLeft < MAX_ATTEMPTS) Note("Those digits didn't match. ${s.attemptsLeft} tries left.", Vault.Danger)
+            }
+            CodeCheck.COMPARE -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Note("Does the other device show these digits?")
+                DigitReadout(s.compare ?: "", Vault.Amber, Vault.Surface, Vault.AmberEdge, 48.sp)
+                if (s.attemptsLeft < MAX_ATTEMPTS) Note("${s.attemptsLeft} tries left.", Vault.Danger)
+            }
+            CodeCheck.NONE -> Callout("No digits are checked at this level. The $what goes to whichever device answered the code.", Vault.Danger, Vault.Danger)
+        }
+        if (maxFriction) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Checkbox) { attested = !attested },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(attested, { attested = it }, colors = CheckboxDefaults.colors(checkedColor = Vault.Amber, checkmarkColor = Vault.OnAmber, uncheckedColor = Vault.Muted))
+                Text("I scanned this code myself, from a screen in front of me", fontFamily = PlexSans, fontSize = 15.sp, color = Vault.Text)
+            }
+        }
     }
 }
 
-private fun rememberKey(view: TransferView<*>) = view.session.attemptsLeft
-
 @Composable
-private fun AcceptPrompt(model: AppModel, active: Active, view: TransferView<*>) {
+private fun AcceptScreen(model: AppModel, active: Active, view: TransferView<*>) {
     var label by remember { mutableStateOf("") }
-    Text(if (active.demo) "Your other device sent a text" else "Your other device sent a Nostr key", style = MaterialTheme.typography.titleLarge)
-    view.session.code?.let { Text("Digits on screen: $it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    if (active.demo) {
-        Text(view.session.rendering ?: "")
-    } else {
-        Text("Log in as this identity?")
-        Text(view.session.rendering ?: "", fontFamily = FontFamily.Monospace, fontSize = 13.sp)
-        OutlinedTextField(label, { label = it }, label = { Text("Name (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    val (eyebrow, color) = eyebrowFor(active, view, "step 3 of 3")
+    Frame(
+        onBack = { model.closeTransfer() },
+        actions = {
+            MainButton("Keep it", { model.accept(label.trim()) })
+            EdgeButton("Discard it", { model.decline() })
+        },
+    ) {
+        Eyebrow(eyebrow, color)
+        Headline(if (active.demo) "Your other device sent a text" else "Your other device sent a key")
+        if (active.demo) {
+            Lede(view.session.rendering ?: "")
+        } else {
+            Note("Log in as this identity?")
+            Panel(edge = Vault.TealEdge) {
+                Text(view.session.rendering ?: "", fontFamily = PlexMono, fontSize = 13.sp, color = Vault.Text)
+            }
+            OutlinedTextField(label, { label = it }, label = { Text("Name it (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors())
+        }
+        view.session.code?.let { Note("Digits on screen: $it") }
     }
-    Button({ model.accept(label.trim()) }, Modifier.fillMaxWidth().height(52.dp)) { Text("Keep it") }
-    TextButton({ model.decline() }, Modifier.fillMaxWidth()) { Text("Discard it") }
 }
 
 @Composable
-private fun EndedPanel(model: AppModel, active: Active, view: TransferView<*>) {
+private fun EndedScreen(model: AppModel, active: Active, view: TransferView<*>) {
     val o = view.session.outcome
     val what = if (active.demo) "text" else "key"
     val (headline, detail) = when (o) {
@@ -603,38 +650,25 @@ private fun EndedPanel(model: AppModel, active: Active, view: TransferView<*>) {
         Outcome.RECEIVED -> when {
             active.demo -> "Received" to "“${view.value ?: ""}”"
             active.storeError != null -> "Received, but not stored" to "Couldn't store it: ${active.storeError}"
-            active.stored != null -> "Key added" to "${active.stored!!.label} is now on this phone."
+            active.stored != null -> "Key added" to "${displayName(active.stored!!.label)} is now on this phone."
             else -> "Received" to "Storing…"
         }
         Outcome.DECLINED -> "Stopped" to "Nothing was sent or kept."
         Outcome.CANCELLED -> "Cancelled" to "Nothing moved."
         Outcome.PEER_ABORTED -> "The other device stopped" to "Nothing moved."
-        Outcome.ATTEMPTS_EXHAUSTED -> "Too many wrong digits" to "Nothing was sent. Start again from the other device's code. Repeated failures can mean someone is interfering, not just mistyping."
+        Outcome.ATTEMPTS_EXHAUSTED -> "Too many wrong digits" to "Nothing was sent. Start again from a fresh code on the other device. Repeated failures can mean someone is interfering, not just mistyping."
         Outcome.EXPIRED -> "Timed out" to "Ten minutes passed. Nothing moved."
         Outcome.BAD_PAYLOAD -> "That wasn't a key" to "What arrived wasn't a valid Nostr key, so it was thrown away."
-        Outcome.BLOCKED_PEER -> "Refused" to "A pairing code already failed against that device in the last hour."
+        Outcome.BLOCKED_PEER -> "Refused" to "Digits already failed against that device in the last hour."
         Outcome.SECOND_RESPONDER -> "Stopped: two devices answered" to "With no digits to tell them apart, nothing moved."
         null -> "Ended" to ""
     }
-    Text(headline, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-    Text(detail)
-    Button({ model.closeTransfer() }, Modifier.fillMaxWidth()) { Text("Done") }
-}
-
-@Composable
-private fun RelayFooter(view: TransferView<*>) {
-    var open by remember { mutableStateOf(false) }
-    HorizontalDivider()
-    TextButton({ open = !open }) {
-        Text(
-            "${view.relays.count { it.inUse && it.state == "open" }} relay${if (view.relays.count { it.inUse && it.state == "open" } == 1) "" else "s"} connected · details",
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    if (open) {
-        for (r in view.relays) {
-            Text("${r.url}  ${r.state}${r.why?.let { " ($it)" } ?: ""}", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        for (line in view.log.takeLast(30)) Text(line, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.outline)
+    val good = o == Outcome.DELIVERED || o == Outcome.SENT_UNCONFIRMED || (o == Outcome.RECEIVED && active.storeError == null)
+    val (eyebrow, color) = eyebrowFor(active, view)
+    Frame(onBack = { model.closeTransfer() }, actions = { MainButton("Done", { model.closeTransfer() }) }) {
+        Eyebrow(eyebrow, color)
+        Headline(headline)
+        Lede(detail, if (good) Vault.Text else Vault.Muted)
+        active.stored?.let { k -> if (o == Outcome.RECEIVED) KeyCard(k) {} }
     }
 }
