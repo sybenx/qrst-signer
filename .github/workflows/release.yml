@@ -17,7 +17,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
       - name: Unit tests
         run: ./gradlew --no-daemon :app:testDebugUnitTest
       - name: Build signed release
