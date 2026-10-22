@@ -96,7 +96,7 @@ class Vault(context: Context) {
         val ct = cipher.doFinal(secret)
         val id = pub.take(16)
         val entry = VaultEntry(
-            id, pub, label.ifBlank { "Key ${existing.size + 1}" }, viaTransfer, System.currentTimeMillis() / 1000,
+            id, pub, label.trim(), viaTransfer, System.currentTimeMillis() / 1000,
             Base64.getEncoder().encodeToString(ct), Base64.getEncoder().encodeToString(cipher.iv),
         )
         prefs.edit().putBoolean("auth:$id", auth).commit()

@@ -28,6 +28,7 @@ object Vault {
     val OnAmber = Color(0xFF1A1406)
     val AmberEdge = Color(0xFF5A4520)
     val AmberText = Color(0xFFE9CF97)
+    val AmberGround = Color(0xFF221A0D)
     val Teal = Color(0xFF7FC8C0)
     val TealEdge = Color(0xFF2F4A47)
     val TealGround = Color(0xFF16201F)

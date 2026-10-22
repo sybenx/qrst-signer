@@ -158,7 +158,7 @@ private fun Home(model: AppModel, keys: List<VaultEntry>, demo: Boolean) {
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Your keys", fontFamily = PlexSans, fontWeight = FontWeight.SemiBold, fontSize = 34.sp, color = Vault.Text)
-            Note("Held in this phone's secure hardware. They leave only by a transfer you approve.")
+            Note("Held in this phone's secure hardware.")
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             for (k in keys) KeyCard(k) { editing = k }
@@ -185,8 +185,12 @@ private fun KeyCard(k: VaultEntry, onClick: () -> Unit) {
     ) {
         KeyPattern(k.pub)
         Column(Modifier.weight(1f)) {
-            Text(displayName(k.label), fontFamily = PlexSans, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = Vault.Text, maxLines = 1)
-            Text(shortNpub(k.npub), fontFamily = PlexMono, fontSize = 13.sp, color = Vault.Muted)
+            if (isUnnamed(k)) {
+                Text(shortNpub(k.npub), fontFamily = PlexMono, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = Vault.Text, maxLines = 1)
+            } else {
+                Text(k.label, fontFamily = PlexSans, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = Vault.Text, maxLines = 1)
+                Text(shortNpub(k.npub), fontFamily = PlexMono, fontSize = 13.sp, color = Vault.Muted)
+            }
         }
         if (k.viaTransfer) Pill("received", Vault.Teal, Vault.TealEdge)
     }
@@ -203,7 +207,7 @@ private fun DashedRow(text: String, onClick: () -> Unit) {
 
 @Composable
 private fun KeyDialog(model: AppModel, k: VaultEntry, onDismiss: () -> Unit) {
-    var label by remember { mutableStateOf(displayName(k.label).takeIf { it != "Unnamed key" } ?: "") }
+    var label by remember { mutableStateOf(if (isUnnamed(k)) "" else k.label) }
     var confirmDelete by remember { mutableStateOf(false) }
     val context = LocalContext.current
     AlertDialog(
@@ -212,7 +216,7 @@ private fun KeyDialog(model: AppModel, k: VaultEntry, onDismiss: () -> Unit) {
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 KeyPattern(k.pub, 36.dp)
-                Text(displayName(k.label), color = Vault.Text)
+                Text(displayName(k), color = Vault.Text)
             }
         },
         text = {
@@ -225,7 +229,7 @@ private fun KeyDialog(model: AppModel, k: VaultEntry, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton({ model.rename(k, label.trim().ifEmpty { k.label }); onDismiss() }) { Text("Save", color = Vault.Text) } },
+        confirmButton = { TextButton({ model.rename(k, label.trim().ifEmpty { k.npub }); onDismiss() }) { Text("Save", color = Vault.Text) } },
         dismissButton = {
             TextButton({ if (confirmDelete) { model.delete(k); onDismiss() } else confirmDelete = true }) {
                 Text(if (confirmDelete) "Delete this phone's copy" else "Delete…", color = Vault.Danger)
@@ -248,7 +252,7 @@ private fun ScanScreen(model: AppModel) {
             Box(Modifier.fillMaxWidth().height(LocalRoom.current * 0.55f).clip(RoundedCornerShape(20.dp)).border(1.dp, Vault.Line, RoundedCornerShape(20.dp))) {
                 QrScanner { model.openLink(it, viaCamera = true) }
             }
-            Note("The code says which way the key goes. Nothing moves until digits are checked on both screens.")
+            Note("Nothing moves until digits are checked on both screens.")
             if (!pasting) {
                 QuietLink("Paste a pairing link instead", { pasting = true })
             } else {
@@ -457,7 +461,7 @@ private fun ShowCodeScreen(model: AppModel, active: Active, view: TransferView<*
             if (!offer && active.entry != null) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     KeyPattern(active.entry.pub, 28.dp)
-                    Text(displayName(active.entry.label), fontFamily = PlexSans, fontWeight = FontWeight.Medium, color = Vault.Amber)
+                    Text(displayName(active.entry), fontFamily = PlexSans, fontWeight = FontWeight.Medium, color = Vault.Amber)
                 }
             }
         }
@@ -531,8 +535,14 @@ private fun ReleaseScreen(model: AppModel, active: Active, view: TransferView<*>
     val maxFriction = origin != null || !view.viaCamera
     val receiveOnly = active.entry?.viaTransfer == true
     val what = if (active.demo) "text" else "key"
-    val gated = s.check == CodeCheck.TYPE || maxFriction || receiveOnly
-    val ready = (s.check != CodeCheck.TYPE || digits.length == 5) && (!maxFriction || attested) && (!receiveOnly || allowSend)
+    // The extra deliberate act §9.1 asks for at maximum friction, given to every key
+    // send: the likeliest scam is "scan this to log in", read by this app's own camera,
+    // and typing digits does not stop it. Only the user saying no does.
+    val confirm = maxFriction || !active.demo
+    val gated = s.check == CodeCheck.TYPE || confirm || receiveOnly
+    val ready = (s.check != CodeCheck.TYPE || digits.length == 5) && (!confirm || attested) && (!receiveOnly || allowSend)
+    // The credential check of profiles/nostr-nsec.md comes next; the icon on the button says so.
+    val unlock = !active.demo && model.vault.needsAuth
 
     Frame(
         onBack = { model.closeTransfer() },
@@ -540,58 +550,39 @@ private fun ReleaseScreen(model: AppModel, active: Active, view: TransferView<*>
             // §9.1 (spec PR #13): declining comes first and is never the smaller control.
             // Sending stays visibly off until the user has done what this screen asks,
             // and only then leads. With nothing to do first, declining stays prominent.
+            val label = when {
+                s.check == CodeCheck.COMPARE -> "They match. Send my $what"
+                origin != null -> "Send my $what to $origin"
+                else -> "Send my $what to that device"
+            }
             if (gated) {
                 EdgeButton("Don't send", { model.decline() })
-                SendButton(
-                    when {
-                        s.check == CodeCheck.COMPARE -> "They match. Send my $what"
-                        origin != null -> "Send my $what to $origin"
-                        else -> "Send my $what to that device"
-                    },
-                    { model.release(digits.takeIf { it.length == 5 }); digits = "" },
-                    ready,
-                )
+                SendButton(label, { model.release(digits.takeIf { it.length == 5 }); digits = "" }, ready, fingerprint = unlock)
             } else {
                 MainButton("Don't send", { model.decline() })
-                EdgeButton(if (s.check == CodeCheck.COMPARE) "They match. Send my $what" else "Send my $what to that device", { model.release(null) }, color = Vault.Amber, edge = Vault.AmberEdge)
+                EdgeButton(label, { model.release(null) }, color = Vault.Amber, edge = Vault.AmberEdge)
             }
             if (s.check == CodeCheck.COMPARE) QuietLink("The digits are different", { model.rejectMatch() })
-            if (!active.demo && model.vault.needsAuth) {
-                Text("Your fingerprint or screen lock confirms it next", fontFamily = PlexSans, fontSize = 13.sp, color = Vault.Muted, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            }
         },
     ) {
-        Eyebrow(eyebrowFor(active, view).first, Vault.Amber)
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // One statement of what is happening, in the one color that means "leaves this phone".
+        Panel(edge = Vault.AmberEdge, fill = Vault.AmberGround) {
+            Eyebrow(if (active.demo) "Text leaves this phone" else "Key leaves this phone", Vault.Amber)
             Headline("This is not a login.")
             Lede(
-                if (active.demo) "You're giving another device your text. Once sent it can't be taken back."
-                else "You're giving another device your key. It keeps a working copy for good. Nostr keys can't be revoked.",
+                if (active.demo) "The other device keeps this text. Once sent it can't be taken back."
+                else "The other device keeps a working copy of ${active.entry?.let { displayName(it) } ?: "this key"} for good. Nostr keys can't be revoked.",
+                Vault.AmberText,
             )
         }
-        val entry = active.entry
-        Facts(
-            *listOfNotNull(
-                entry?.let { "Key" to "${displayName(it.label)}  ${shortNpub(it.npub)}" },
-                "To" to (origin?.let { "a web page claiming $it" } ?: "an app, by its own account"),
-            ).toTypedArray(),
-        )
-        if (!view.viaCamera) Callout("Opened as a link, not by this app's scanner. Only continue if the code is on a screen in front of you.")
-        if (s.ready > 1 || s.multipleResponders) Callout("More than one device answered this code. Only send to the one in front of you.", Vault.Danger, Vault.Danger)
-        if (receiveOnly) {
-            Panel(edge = Vault.TealEdge) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Allow sending this key once", fontFamily = PlexSans, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = Vault.Text)
-                        Note("It arrived by transfer, so this phone only receives it unless you say so.")
-                    }
-                    Switch(allowSend, { allowSend = it }, colors = SwitchDefaults.colors(checkedTrackColor = Vault.Amber, checkedThumbColor = Vault.OnAmber))
-                }
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Note("To: " + (origin?.let { "a web page claiming to be $it (unverified)" } ?: "an app, by its own account (unverified)"))
+            if (!view.viaCamera) Note("Opened as a link, not by this app's scanner")
         }
+        if (s.ready > 1 || s.multipleResponders) Callout("More than one device answered this code. Only send to the one in front of you.", Vault.Danger, Vault.Danger)
         when (s.check) {
             CodeCheck.TYPE -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Note("Digits shown on your other device")
+                Note("Digits on your other device")
                 DigitField(digits, { digits = it }, focus)
                 if (s.attemptsLeft < MAX_ATTEMPTS) Note("Those digits didn't match. ${s.attemptsLeft} tries left.", Vault.Danger)
             }
@@ -600,17 +591,36 @@ private fun ReleaseScreen(model: AppModel, active: Active, view: TransferView<*>
                 DigitReadout(s.compare ?: "", Vault.Amber, Vault.Surface, Vault.AmberEdge, 48.sp)
                 if (s.attemptsLeft < MAX_ATTEMPTS) Note("${s.attemptsLeft} tries left.", Vault.Danger)
             }
-            CodeCheck.NONE -> Callout("No digits are checked at this level. The $what goes to whichever device answered the code.", Vault.Danger, Vault.Danger)
+            CodeCheck.NONE -> Note("No digits are checked at this level. The $what goes to whichever device answered the code.", Vault.Danger)
         }
-        if (maxFriction) {
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Checkbox) { attested = !attested },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Checkbox(attested, { attested = it }, colors = CheckboxDefaults.colors(checkedColor = Vault.Amber, checkmarkColor = Vault.OnAmber, uncheckedColor = Vault.Muted))
-                Text("I scanned this code myself, from a screen in front of me", fontFamily = PlexSans, fontSize = 15.sp, color = Vault.Text)
-            }
+        if (receiveOnly) {
+            Toggle("This key arrived by transfer. Allow sending it this once", allowSend) { allowSend = it }
         }
+        if (confirm) {
+            // States the consequence rather than vouching for where the code came from: a
+            // scammer can talk someone into "I scanned it myself", less easily into this.
+            // A claimed website is named in it, where a lookalike domain is likeliest noticed.
+            Toggle(
+                when {
+                    active.demo -> "I understand this text can't be taken back"
+                    origin != null -> "I understand this gives ${origin.removePrefix("https://")} permanent control of my account"
+                    else -> "I understand this gives that device permanent control of my account"
+                },
+                attested,
+            ) { attested = it }
+        }
+    }
+}
+
+/** A checkbox row: the box and its whole line are one target. */
+@Composable
+private fun Toggle(text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Checkbox) { onChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked, onChange, colors = CheckboxDefaults.colors(checkedColor = Vault.Amber, checkmarkColor = Vault.OnAmber, uncheckedColor = Vault.Muted))
+        Text(text, fontFamily = PlexSans, fontSize = 15.sp, lineHeight = 21.sp, color = Vault.Text)
     }
 }
 
@@ -650,7 +660,7 @@ private fun EndedScreen(model: AppModel, active: Active, view: TransferView<*>) 
         Outcome.RECEIVED -> when {
             active.demo -> "Received" to "“${view.value ?: ""}”"
             active.storeError != null -> "Received, but not stored" to "Couldn't store it: ${active.storeError}"
-            active.stored != null -> "Key added" to "${displayName(active.stored!!.label)} is now on this phone."
+            active.stored != null -> "Key added" to "${displayName(active.stored!!)} is now on this phone."
             else -> "Received" to "Storing…"
         }
         Outcome.DECLINED -> "Stopped" to "Nothing was sent or kept."

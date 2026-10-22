@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -176,15 +177,19 @@ fun EdgeButton(text: String, onClick: () -> Unit, color: Color = Vault.Text, edg
  * the filled primary control. Never focused, never a default action.
  */
 @Composable
-fun SendButton(text: String, onClick: () -> Unit, ready: Boolean) {
+fun SendButton(text: String, onClick: () -> Unit, ready: Boolean, fingerprint: Boolean = false) {
+    val color = if (ready) Vault.OnAmber else Vault.Muted
+    val content: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+            // A fingerprint or screen-lock check comes next (profiles/nostr-nsec.md).
+            if (fingerprint) Icon(Icons.Filled.Fingerprint, "Confirmed with your fingerprint or screen lock", tint = color, modifier = Modifier.padding(start = 12.dp).size(22.dp))
+            ButtonLabel(text, color, if (ready) FontWeight.SemiBold else FontWeight.Medium)
+        }
+    }
     if (ready) {
-        ButtonBox(onClick, true, 56.dp, RoundedCornerShape(16.dp), Vault.Amber, null) {
-            ButtonLabel(text, Vault.OnAmber, FontWeight.SemiBold)
-        }
+        ButtonBox(onClick, true, 56.dp, RoundedCornerShape(16.dp), Vault.Amber, null) { content() }
     } else {
-        ButtonBox(onClick, false, 56.dp, RoundedCornerShape(16.dp), null, Vault.Line, dashed = true) {
-            ButtonLabel(text, Vault.Muted)
-        }
+        ButtonBox(onClick, false, 56.dp, RoundedCornerShape(16.dp), null, Vault.Line, dashed = true) { content() }
     }
 }
 
@@ -269,8 +274,11 @@ fun KeyPattern(pubHex: String, size: Dp = 44.dp) {
     }
 }
 
-/** Names an older key stored before keys had names, rather than repeating its npub. */
-fun displayName(label: String): String = if (label.startsWith("npub1")) "Unnamed key" else label
+/** True for a key the user never named: it is known by its npub, which reads as familiar. */
+fun isUnnamed(k: cc.aaro.qrst.vault.VaultEntry): Boolean = k.label.isBlank() || k.label.startsWith("npub1")
+
+/** A key's name, or its shortened npub when it has none. */
+fun displayName(k: cc.aaro.qrst.vault.VaultEntry): String = if (isUnnamed(k)) shortNpub(k.npub) else k.label
 
 fun shortNpub(npub: String) = npub.take(12) + "…" + npub.takeLast(6)
 
