@@ -125,26 +125,40 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
 @Composable
 private fun Home(model: AppModel, keys: List<VaultEntry>, demo: Boolean) {
     var editing by remember { mutableStateOf<VaultEntry?>(null) }
-    Frame(
-        onBack = null,
-        actions = {
-            // C's round Scan button: the one thing most visits come here to do.
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Box(
-                    Modifier.size(150.dp).clip(CircleShape).background(Vault.Surface).border(2.dp, Vault.Line, CircleShape)
-                        .clickable(role = Role.Button) { model.go(Screen.Scan) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Filled.QrCodeScanner, null, tint = Vault.Text, modifier = Modifier.size(44.dp))
-                        Text("Scan a code", fontFamily = PlexSans, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Vault.Text)
-                    }
+    val wide = isWide()
+    // C's round Scan button: the one thing most visits come here to do.
+    val scan: @Composable () -> Unit = {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.size(if (wide) 140.dp else 150.dp).clip(CircleShape).background(Vault.Surface).border(2.dp, Vault.Line, CircleShape)
+                    .clickable(role = Role.Button) { model.go(Screen.Scan) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Filled.QrCodeScanner, null, tint = Vault.Text, modifier = Modifier.size(44.dp))
+                    Text("Scan a code", fontFamily = PlexSans, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Vault.Text)
                 }
             }
-            Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                EdgeButton("Receive a key", { model.receiveByShowing() }, color = Vault.Teal, edge = Vault.TealEdge, modifier = Modifier.weight(1f))
-                EdgeButton("Send a key", { model.go(Screen.PickKey(null, true)) }, color = Vault.Amber, edge = Vault.AmberEdge, modifier = Modifier.weight(1f), enabled = keys.isNotEmpty() || demo)
+        }
+    }
+    val receive: @Composable (Modifier) -> Unit = { m -> EdgeButton("Receive a key", { model.receiveByShowing() }, color = Vault.Teal, edge = Vault.TealEdge, modifier = m) }
+    val send: @Composable (Modifier) -> Unit = { m -> EdgeButton("Send a key", { model.go(Screen.PickKey(null, true)) }, color = Vault.Amber, edge = Vault.AmberEdge, modifier = m, enabled = keys.isNotEmpty() || demo) }
+    Frame(
+        onBack = null,
+        // Wide: keys on the left, Scan and the two buttons stacked on the right.
+        aside = if (wide) { { scan() } } else null,
+        asideWidth = if (wide) (LocalConfiguration.current.screenWidthDp * 0.38f).coerceIn(160f, 220f).dp else null,
+        actions = {
+            if (wide) {
+                receive(Modifier)
+                send(Modifier)
+            } else {
+                scan()
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    receive(Modifier.weight(1f))
+                    send(Modifier.weight(1f))
+                }
             }
         },
     ) {
@@ -157,7 +171,7 @@ private fun Home(model: AppModel, keys: List<VaultEntry>, demo: Boolean) {
             ) { Icon(Icons.Outlined.Settings, "Settings", tint = Vault.Muted) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Your keys", fontFamily = PlexSans, fontWeight = FontWeight.SemiBold, fontSize = 34.sp, color = Vault.Text)
+            Text("Your keys", fontFamily = PlexSans, fontWeight = FontWeight.SemiBold, fontSize = if (wide) 28.sp else 34.sp, color = Vault.Text)
             Note("Held in this phone's secure hardware.")
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -177,22 +191,27 @@ private fun Home(model: AppModel, keys: List<VaultEntry>, demo: Boolean) {
 
 @Composable
 private fun KeyCard(k: VaultEntry, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Vault.Surface).border(1.dp, Vault.Edge, RoundedCornerShape(16.dp))
-            .clickable(role = Role.Button, onClick = onClick).padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        KeyPattern(k.pub)
-        Column(Modifier.weight(1f)) {
-            if (isUnnamed(k)) {
-                Text(shortNpub(k.npub), fontFamily = PlexMono, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = Vault.Text, maxLines = 1)
-            } else {
-                Text(k.label, fontFamily = PlexSans, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = Vault.Text, maxLines = 1)
-                Text(shortNpub(k.npub), fontFamily = PlexMono, fontSize = 13.sp, color = Vault.Muted)
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // A narrow card (a column of a wide, short screen) keeps the name whole and drops the pill.
+        val compact = maxWidth < 300.dp
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Vault.Surface).border(1.dp, Vault.Edge, RoundedCornerShape(16.dp))
+                .clickable(role = Role.Button, onClick = onClick).padding(if (compact) 10.dp else 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 14.dp),
+        ) {
+            KeyPattern(k.pub, if (compact) 34.dp else 44.dp)
+            Column(Modifier.weight(1f)) {
+                val overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                if (isUnnamed(k)) {
+                    Text(shortNpub(k.npub, compact), fontFamily = PlexMono, fontWeight = FontWeight.Medium, fontSize = if (compact) 14.sp else 16.sp, color = Vault.Text, maxLines = 1, overflow = overflow)
+                } else {
+                    Text(k.label, fontFamily = PlexSans, fontWeight = FontWeight.Medium, fontSize = if (compact) 15.sp else 17.sp, color = Vault.Text, maxLines = 1, overflow = overflow)
+                    Text(shortNpub(k.npub, compact), fontFamily = PlexMono, fontSize = 13.sp, color = Vault.Muted, maxLines = 1, overflow = overflow)
+                }
             }
+            if (k.viaTransfer && !compact) Pill("received", Vault.Teal, Vault.TealEdge)
         }
-        if (k.viaTransfer) Pill("received", Vault.Teal, Vault.TealEdge)
     }
 }
 
@@ -245,13 +264,34 @@ private fun ScanScreen(model: AppModel) {
     BackHandler { model.go(Screen.Home) }
     var pasting by remember { mutableStateOf(false) }
     var link by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize()) {
+    val wide = isWide()
+    val words: @Composable () -> Unit = {
+        Eyebrow("Scan")
+        Headline("Point at a QRST code")
+        Note("Nothing moves until digits are checked on both screens.")
+        if (!pasting) {
+            QuietLink("Paste a pairing link instead", { pasting = true })
+        } else {
+            OutlinedTextField(link, { link = it }, label = { Text("Pairing link") }, modifier = Modifier.fillMaxWidth(), singleLine = true, colors = fieldColors())
+            MainButton("Use this link", { model.openLink(link, viaCamera = false) }, enabled = link.isNotBlank())
+        }
+    }
+    @Composable
+    fun camera(modifier: Modifier) {
+        Box(modifier.clip(RoundedCornerShape(20.dp)).border(1.dp, Vault.Line, RoundedCornerShape(20.dp))) {
+            QrScanner { model.openLink(it, viaCamera = true) }
+        }
+    }
+    if (wide) {
+        // Wide: the camera as large a square as the height allows, the words beside it.
+        Frame(onBack = { model.go(Screen.Home) }, aside = { words() }) {
+            camera(Modifier.fillMaxWidth().height(LocalRoom.current - 20.dp))
+        }
+    } else {
         Frame(onBack = { model.go(Screen.Home) }) {
             Eyebrow("Scan")
             Headline("Point at a QRST code")
-            Box(Modifier.fillMaxWidth().height(LocalRoom.current * 0.55f).clip(RoundedCornerShape(20.dp)).border(1.dp, Vault.Line, RoundedCornerShape(20.dp))) {
-                QrScanner { model.openLink(it, viaCamera = true) }
-            }
+            camera(Modifier.fillMaxWidth().height(LocalRoom.current * 0.55f))
             Note("Nothing moves until digits are checked on both screens.")
             if (!pasting) {
                 QuietLink("Paste a pairing link instead", { pasting = true })
@@ -504,21 +544,35 @@ private fun KeepBright() {
 @Composable
 private fun DigitsScreen(model: AppModel, active: Active, view: TransferView<*>) {
     val code = view.session.code
-    val (eyebrow, color) = eyebrowFor(active, view, "step 2 of 3")
+    val wide = isWide()
+    val relays = view.relays.filter { it.inUse }.map { relayName(it.url) to (it.state == "open") }
+    val rejected: @Composable (Modifier) -> Unit = { m ->
+        if (view.showing) EdgeButton("Other device rejected these? Show the next code", { model.advance() }, color = Vault.Muted, edge = Vault.Line, modifier = m, pill = true)
+    }
     Frame(onBack = { model.closeTransfer() }) {
-        Eyebrow(eyebrow, color)
+        Eyebrow(if (active.demo) "Receiving text" else "Receiving a key", Vault.Teal)
         if (code == null) {
             Headline("Confirm on the other device")
             Note("No digits are checked at this level.")
         } else {
             Headline(if (view.session.check == CodeCheck.TYPE) "Type these on the device that's sending" else "Check the other device shows these")
-            Spacer(Modifier.height(8.dp))
-            DigitReadout(code, Vault.Teal, Vault.TealGround, Vault.TealEdge)
-            Note("These digits belong to this transfer only. They are not a PIN.")
+            Spacer(Modifier.height(if (wide) 0.dp else 12.dp))
+            DigitReadout(
+                code, Vault.Teal, Vault.TealGround, Vault.TealEdge,
+                size = if (wide) 76.sp else 62.sp, bars = false, caption = "This transfer only. Not a PIN.",
+            )
+            Spacer(Modifier.height(if (wide) 0.dp else 12.dp))
         }
-        RelayChips(view.relays.filter { it.inUse }.map { relayName(it.url) to (it.state == "open") })
+        if (wide) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { RelayChips(relays) }
+                rejected(Modifier.width(260.dp))
+            }
+        } else {
+            RelayChips(relays)
+            rejected(Modifier)
+        }
         MultipleResponders(view)
-        if (view.showing) QuietLink("The other device rejected these digits", { model.advance() })
         RelayDetails(view)
     }
 }
@@ -543,9 +597,27 @@ private fun ReleaseScreen(model: AppModel, active: Active, view: TransferView<*>
     val ready = (s.check != CodeCheck.TYPE || digits.length == 5) && (!confirm || attested) && (!receiveOnly || allowSend)
     // The credential check of profiles/nostr-nsec.md comes next; the icon on the button says so.
     val unlock = !active.demo && model.vault.needsAuth
+    val wide = isWide()
+
+    // The digits: in the left column on a tall screen, beside the buttons on a wide one.
+    val check: @Composable () -> Unit = {
+        when (s.check) {
+            CodeCheck.TYPE -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                DigitField(digits, { digits = it }, focus, "Digits on your other device", size = if (wide) 38.sp else 46.sp)
+                if (s.attemptsLeft < MAX_ATTEMPTS) Note("Those digits didn't match. ${s.attemptsLeft} tries left.", Vault.Danger)
+            }
+            CodeCheck.COMPARE -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Note("Does the other device show these digits?")
+                DigitReadout(s.compare ?: "", Vault.Amber, Vault.Surface, Vault.AmberEdge, if (wide) 38.sp else 48.sp)
+                if (s.attemptsLeft < MAX_ATTEMPTS) Note("${s.attemptsLeft} tries left.", Vault.Danger)
+            }
+            CodeCheck.NONE -> Note("No digits are checked at this level. The $what goes to whichever device answered the code.", Vault.Danger)
+        }
+    }
 
     Frame(
         onBack = { model.closeTransfer() },
+        aside = if (wide) { { check() } } else null,
         actions = {
             // §9.1 (spec PR #13): declining comes first and is never the smaller control.
             // Sending stays visibly off until the user has done what this screen asks,
@@ -556,7 +628,7 @@ private fun ReleaseScreen(model: AppModel, active: Active, view: TransferView<*>
                 else -> "Send my $what to that device"
             }
             if (gated) {
-                EdgeButton("Don't send", { model.decline() })
+                EdgeButton("Don't send", { model.decline() }, pill = true)
                 SendButton(label, { model.release(digits.takeIf { it.length == 5 }); digits = "" }, ready, fingerprint = unlock)
             } else {
                 MainButton("Don't send", { model.decline() })
@@ -580,19 +652,7 @@ private fun ReleaseScreen(model: AppModel, active: Active, view: TransferView<*>
             if (!view.viaCamera) Note("Opened as a link, not by this app's scanner")
         }
         if (s.ready > 1 || s.multipleResponders) Callout("More than one device answered this code. Only send to the one in front of you.", Vault.Danger, Vault.Danger)
-        when (s.check) {
-            CodeCheck.TYPE -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Note("Digits on your other device")
-                DigitField(digits, { digits = it }, focus)
-                if (s.attemptsLeft < MAX_ATTEMPTS) Note("Those digits didn't match. ${s.attemptsLeft} tries left.", Vault.Danger)
-            }
-            CodeCheck.COMPARE -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Note("Does the other device show these digits?")
-                DigitReadout(s.compare ?: "", Vault.Amber, Vault.Surface, Vault.AmberEdge, 48.sp)
-                if (s.attemptsLeft < MAX_ATTEMPTS) Note("${s.attemptsLeft} tries left.", Vault.Danger)
-            }
-            CodeCheck.NONE -> Note("No digits are checked at this level. The $what goes to whichever device answered the code.", Vault.Danger)
-        }
+        if (!wide) check()
         if (receiveOnly) {
             Toggle("This key arrived by transfer. Allow sending it this once", allowSend) { allowSend = it }
         }

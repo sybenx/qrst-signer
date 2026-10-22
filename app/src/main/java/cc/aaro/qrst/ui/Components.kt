@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -53,43 +56,103 @@ import cc.aaro.qrst.core.hexToBytes
 // ---- layout -------------------------------------------------------------------------------
 
 /**
- * One screen: an optional back row, content that scrolls, and actions pinned to the
- * bottom. The actions ride above the keyboard, so the send control is never hidden
- * behind it while digits are typed.
+ * True on a screen that is wider than it is tall, such as a handheld like the Retroid
+ * Pocket Mini (nearly square) or a phone on its side. Screens there split into two
+ * columns instead of stacking, so nothing gets squeezed to a sliver.
+ */
+@Composable
+fun isWide(): Boolean {
+    val c = androidx.compose.ui.platform.LocalConfiguration.current
+    return c.screenWidthDp > c.screenHeightDp * 1.05f
+}
+
+/**
+ * One screen: an optional back row, content that scrolls, an optional `aside`, and
+ * actions that are never scrolled away. The actions ride above the keyboard, so the
+ * send control is never hidden behind it while digits are typed.
+ *
+ * Tall screens stack content, then aside, with the actions pinned to the bottom.
+ * Wide screens put content in a left column and aside plus actions in a right one.
  */
 @Composable
 fun Frame(
     onBack: (() -> Unit)?,
     actions: (@Composable ColumnScope.() -> Unit)? = null,
+    aside: (@Composable ColumnScope.() -> Unit)? = null,
+    /** Wide screens: the right column's width. Default: as much as the left can spare. */
+    asideWidth: Dp? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val wide = isWide()
     Column(Modifier.fillMaxSize().imePadding()) {
         if (onBack != null) {
             Row(Modifier.padding(start = 8.dp, top = 4.dp)) {
                 IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Vault.Muted) }
             }
         } else {
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(if (wide) 12.dp else 20.dp))
         }
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val room = maxHeight
+            val roomWidth = maxWidth
             androidx.compose.runtime.CompositionLocalProvider(LocalRoom provides room) {
-                Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                    content = content,
-                )
+                when {
+                    wide && (actions != null || aside != null) -> Row(Modifier.fillMaxSize().padding(horizontal = 22.dp)) {
+                        Column(
+                            Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            content = content,
+                        )
+                        Spacer(Modifier.width(22.dp))
+                        val column = Modifier.width(asideWidth ?: minOf(320.dp, roomWidth * 0.44f)).fillMaxHeight().padding(top = 6.dp, bottom = 14.dp)
+                        if (keyboardOpen()) {
+                            // With the number pad taking half a short screen, nothing is squeezed:
+                            // the column scrolls instead.
+                            Column(column.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                aside?.invoke(this)
+                                actions?.invoke(this)
+                            }
+                        } else {
+                            Column(column, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    if (aside != null) Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp), content = aside)
+                                }
+                                actions?.invoke(this)
+                            }
+                        }
+                    }
+                    wide -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                        Column(
+                            Modifier.widthIn(max = 640.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            content = content,
+                        )
+                    }
+                    else -> Column(Modifier.fillMaxSize()) {
+                        Column(
+                            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(18.dp),
+                        ) {
+                            content()
+                            aside?.invoke(this)
+                        }
+                        if (actions != null) {
+                            Column(
+                                Modifier.fillMaxWidth().background(Vault.Ground).padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 18.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                content = actions,
+                            )
+                        }
+                    }
+                }
             }
-        }
-        if (actions != null) {
-            Column(
-                Modifier.fillMaxWidth().background(Vault.Ground).padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                content = actions,
-            )
         }
     }
 }
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun keyboardOpen(): Boolean = androidx.compose.foundation.layout.WindowInsets.Companion.isImeVisible
 
 /** Height of a screen's scrolling area, so a QR can be sized to fit whole on screen. */
 val LocalRoom = androidx.compose.runtime.staticCompositionLocalOf { 600.dp }
@@ -101,7 +164,9 @@ fun Eyebrow(text: String, color: Color = Vault.Muted) {
 
 @Composable
 fun Headline(text: String) {
-    Text(text, fontFamily = PlexSans, fontWeight = FontWeight.SemiBold, fontSize = 30.sp, lineHeight = 35.sp, color = Vault.Text)
+    // Smaller on a wide, short screen, where a column is narrow and every line counts.
+    val wide = isWide()
+    Text(text, fontFamily = PlexSans, fontWeight = FontWeight.SemiBold, fontSize = if (wide) 24.sp else 30.sp, lineHeight = if (wide) 29.sp else 35.sp, color = Vault.Text)
 }
 
 @Composable
@@ -126,6 +191,7 @@ private fun ButtonBox(
     edge: Color?,
     dashed: Boolean = false,
     modifier: Modifier = Modifier,
+    radius: Dp = 16.dp,
     content: @Composable () -> Unit,
 ) {
     var m = modifier.fillMaxWidth().height(height).clip(shape)
@@ -136,7 +202,7 @@ private fun ButtonBox(
                 val stroke = 1.5.dp.toPx()
                 drawRoundRect(
                     edge, topLeft = Offset(stroke / 2, stroke / 2), size = Size(size.width - stroke, size.height - stroke),
-                    cornerRadius = CornerRadius(16.dp.toPx()),
+                    cornerRadius = CornerRadius(radius.toPx()),
                     style = Stroke(stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))),
                 )
             }
@@ -165,8 +231,8 @@ fun MainButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
 }
 
 @Composable
-fun EdgeButton(text: String, onClick: () -> Unit, color: Color = Vault.Text, edge: Color = color, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    ButtonBox(onClick, enabled, 54.dp, RoundedCornerShape(16.dp), null, if (enabled) edge else Vault.Line, modifier = modifier) {
+fun EdgeButton(text: String, onClick: () -> Unit, color: Color = Vault.Text, edge: Color = color, modifier: Modifier = Modifier, enabled: Boolean = true, pill: Boolean = false) {
+    ButtonBox(onClick, enabled, if (pill) 56.dp else 54.dp, RoundedCornerShape(if (pill) 28.dp else 16.dp), null, if (enabled) edge else Vault.Line, modifier = modifier) {
         ButtonLabel(text, if (enabled) color else Vault.Muted)
     }
 }
@@ -187,9 +253,9 @@ fun SendButton(text: String, onClick: () -> Unit, ready: Boolean, fingerprint: B
         }
     }
     if (ready) {
-        ButtonBox(onClick, true, 56.dp, RoundedCornerShape(16.dp), Vault.Amber, null) { content() }
+        ButtonBox(onClick, true, 56.dp, RoundedCornerShape(28.dp), Vault.Amber, null, radius = 28.dp) { content() }
     } else {
-        ButtonBox(onClick, false, 56.dp, RoundedCornerShape(16.dp), null, Vault.Line, dashed = true) { content() }
+        ButtonBox(onClick, false, 56.dp, RoundedCornerShape(28.dp), null, Vault.Line, dashed = true, radius = 28.dp) { content() }
     }
 }
 
@@ -280,7 +346,9 @@ fun isUnnamed(k: cc.aaro.qrst.vault.VaultEntry): Boolean = k.label.isBlank() || 
 /** A key's name, or its shortened npub when it has none. */
 fun displayName(k: cc.aaro.qrst.vault.VaultEntry): String = if (isUnnamed(k)) shortNpub(k.npub) else k.label
 
-fun shortNpub(npub: String) = npub.take(12) + "…" + npub.takeLast(6)
+/** The npub with its middle cut out. `compact` keeps less, for a narrow column. */
+fun shortNpub(npub: String, compact: Boolean = false) =
+    if (compact) npub.take(10) + "…" + npub.takeLast(4) else npub.take(12) + "…" + npub.takeLast(6)
 
 // ---- digits -------------------------------------------------------------------------------
 
@@ -289,18 +357,23 @@ fun shortNpub(npub: String) = npub.take(12) + "…" + npub.takeLast(6)
  * each. Used on the receiving phone, where the user reads them off.
  */
 @Composable
-fun DigitReadout(code: String, accent: Color, fill: Color, edge: Color, size: TextUnit = 60.sp) {
+fun DigitReadout(code: String, accent: Color, fill: Color, edge: Color, size: TextUnit = 60.sp, bars: Boolean = true, caption: String? = null) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(fill).border(1.dp, edge, RoundedCornerShape(22.dp))
-            .padding(horizontal = 18.dp, vertical = 22.dp)
+            .padding(horizontal = 22.dp, vertical = 22.dp)
             .semantics { contentDescription = "Digits: " + code.toCharArray().joinToString(" ") },
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            for (c in code) Text(c.toString(), fontFamily = PlexMono, fontWeight = FontWeight.Medium, fontSize = size, color = accent)
+            for (c in code) Text(c.toString(), fontFamily = PlexMono, fontWeight = FontWeight.SemiBold, fontSize = size, color = accent)
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            repeat(5) { Box(Modifier.weight(1f).height(3.dp).background(accent)) }
+        if (bars) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                repeat(5) { Box(Modifier.weight(1f).height(3.dp).background(accent)) }
+            }
+        }
+        if (caption != null) {
+            Text(caption, fontFamily = PlexSans, fontSize = 13.sp, color = Vault.Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
     }
 }
