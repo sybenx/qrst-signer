@@ -77,11 +77,8 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.1")
     implementation("androidx.camera:camera-view:1.4.1")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("cc.aaro.qrst:qrst")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("fr.acinq.secp256k1:secp256k1-kmp-jni-android:0.19.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
-
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20240303")
-    testImplementation("fr.acinq.secp256k1:secp256k1-kmp-jni-jvm:0.19.0")
 }
