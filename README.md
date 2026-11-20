@@ -1,5 +1,9 @@
 # QRST Signer
 
+**Retired. Use [Marble](https://github.com/sybenx/marble) instead.** Marble sends and receives a whole key by
+QRST the same way, and adds a new device to your account with one code. This app gets no new versions; the last
+release stays where it is.
+
 An Android app that moves a Nostr key (nsec) between devices by QR code, using
 [QR Secret Transfer](https://github.com/sybenx/qr-secret-transfer) 1.6-draft and its
 [`nostr-nsec`](https://github.com/sybenx/qr-secret-transfer/blob/main/profiles/nostr-nsec.md) profile.
